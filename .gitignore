@@ -1,0 +1,100 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+!.env.*.example
+.envrc
+.npmrc
+*.local
+
+# Secrets, keys, keystores, and node identity material
+*.pem
+*.key
+*.secret
+*.seed
+*.mnemonic
+*.password
+*.p12
+*.pfx
+*.kdbx
+jwtsecret
+**/jwtsecret
+**/keystore/
+**/nodekey
+**/pq-service-keys.json
+**/private/
+**/.env.local
+**/.env.*.local
+
+# Chain/node runtime state
+data/
+logs/
+artifacts/
+*.log
+*.pid
+*.lock
+LOCK
+transactions.rlp
+
+# Build outputs and caches
+dist/
+out/
+build/
+coverage/
+*.tsbuildinfo
+.turbo/
+.next/
+**/.next/
+**/.turbo/
+**/dist/
+**/out/
+**/cache/
+**/broadcast/
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+
+# Go outputs
+*.test
+*.prof
+*.cover
+coverage.out
+
+# Python/runtime caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Package-manager and tool caches
+.pnpm-store/
+.npm/
+.yarn/
+*.tgz
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Local IDE/agent state
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+.embedded-git-backups/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Avoid accidentally committing an embedded git repo as a submodule.
+# Vendor this intentionally later if we want sphincsminus in-tree.
+research/sphincsminus/
+
+# Local CoreGeth scratch output.
+clients/qubitor-node/coregeth/git.diff

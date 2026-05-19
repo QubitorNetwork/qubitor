@@ -1,0 +1,102 @@
+name: qubitor-network-public
+
+services:
+  public-gateway:
+    image: caddy:2
+    restart: unless-stopped
+    command:
+      - sh
+      - -lc
+      - |
+        normalize_hosts() {
+          raw="$$1"
+          out=""
+          old_ifs="$$IFS"
+          IFS=","
+          for value in $$raw; do
+            value="$$(printf '%s' "$$value" | tr -d '[:space:]')"
+            value="$${value#https://}"
+            value="$${value#http://}"
+            value="$${value%%/*}"
+            if [ -n "$$value" ]; then
+              case ",$$out," in
+                *,"$$value",*) ;;
+                *) out="$${out:+$$out, }$$value" ;;
+              esac
+            fi
+          done
+          IFS="$$old_ifs"
+          printf '%s' "$$out"
+        }
+
+        primary_host() {
+          value="$$1"
+          value="$${value#https://}"
+          value="$${value#http://}"
+          value="$${value%%/*}"
+          printf '%s' "$$value"
+        }
+
+        rpc_host="$$(primary_host "$$QUBITOR_PUBLIC_RPC_URL")"
+        explorer_host="$$(primary_host "$$QUBITOR_PUBLIC_EXPLORER_URL")"
+        faucet_host="$$(primary_host "$$QUBITOR_PUBLIC_FAUCET_URL")"
+        rpc_sites="$$(normalize_hosts "$$QUBITOR_PUBLIC_RPC_URL,$${QUBITOR_PUBLIC_RPC_ALIASES:-}")"
+        explorer_sites="$$(normalize_hosts "$$QUBITOR_PUBLIC_EXPLORER_URL,$${QUBITOR_PUBLIC_EXPLORER_ALIASES:-}")"
+        faucet_sites="$$(normalize_hosts "$$QUBITOR_PUBLIC_FAUCET_URL,$${QUBITOR_PUBLIC_FAUCET_ALIASES:-}")"
+
+        if [ -z "$$rpc_host" ] || [ -z "$$explorer_host" ] || [ -z "$$faucet_host" ]; then
+          echo "QUBITOR_PUBLIC_RPC_URL, QUBITOR_PUBLIC_EXPLORER_URL, and QUBITOR_PUBLIC_FAUCET_URL are required" >&2
+          exit 1
+        fi
+
+        cat > /etc/caddy/Caddyfile <<EOF
+        $$rpc_sites {
+          encode gzip
+          handle /pq-dev* {
+            reverse_proxy pq-relayer-api:18548
+          }
+          handle /faucet* {
+            reverse_proxy faucet-api:18546
+          }
+          handle {
+            reverse_proxy rpc-gateway:18545
+          }
+        }
+
+        $$explorer_sites {
+          encode gzip
+          reverse_proxy explorer-lite:18547
+        }
+
+        EOF
+
+        if [ "$$faucet_host" != "$$rpc_host" ] && [ "$$faucet_host" != "$$explorer_host" ]; then
+          cat >> /etc/caddy/Caddyfile <<EOF
+
+        $$faucet_sites {
+          encode gzip
+          reverse_proxy faucet-api:18546
+        }
+        EOF
+        fi
+
+        caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    environment:
+      QUBITOR_PUBLIC_RPC_URL: ${QUBITOR_PUBLIC_RPC_URL:?set QUBITOR_PUBLIC_RPC_URL}
+      QUBITOR_PUBLIC_EXPLORER_URL: ${QUBITOR_PUBLIC_EXPLORER_URL:?set QUBITOR_PUBLIC_EXPLORER_URL}
+      QUBITOR_PUBLIC_FAUCET_URL: ${QUBITOR_PUBLIC_FAUCET_URL:?set QUBITOR_PUBLIC_FAUCET_URL}
+      QUBITOR_PUBLIC_RPC_ALIASES: ${QUBITOR_PUBLIC_RPC_ALIASES:-}
+      QUBITOR_PUBLIC_EXPLORER_ALIASES: ${QUBITOR_PUBLIC_EXPLORER_ALIASES:-}
+      QUBITOR_PUBLIC_FAUCET_ALIASES: ${QUBITOR_PUBLIC_FAUCET_ALIASES:-}
+    ports:
+      - "${QUBITOR_PUBLIC_HTTP_PORT:-80}:80"
+      - "${QUBITOR_PUBLIC_HTTPS_PORT:-443}:443"
+    volumes:
+      - ../data/caddy/${QUBITOR_NETWORK:-testnet}/data:/data
+      - ../data/caddy/${QUBITOR_NETWORK:-testnet}/config:/config
+    depends_on:
+      - rpc-gateway
+      - pq-relayer-api
+      - faucet-api
+      - explorer-lite
+    profiles: ["public", "all"]

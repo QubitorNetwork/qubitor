@@ -1,0 +1,252 @@
+#!/usr/bin/env node
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const { ml_dsa65 } = await import(
+  pathToFileURL(resolve(rootDir, "packages/pq-native-tx/node_modules/@noble/post-quantum/ml-dsa.js")).href
+);
+const { concatHex, encodeAbiParameters, getAddress, keccak256 } = await import(
+  pathToFileURL(resolve(rootDir, "packages/pq-native-tx/node_modules/viem/_esm/index.js")).href
+);
+
+const systemContracts = {
+  mldsa65Precompile: "0x0000000000000000000000000000000000000100",
+  securityModeRegistry: "0x0000000000000000000000000000000000000201",
+  accountReadinessRegistry: "0x0000000000000000000000000000000000000202",
+  qubitorAccountFactory: "0x0000000000000000000000000000000000000203",
+};
+
+const chainIds = {
+  devnet: 91337,
+  testnet: 91338,
+  mainnet: 91339,
+};
+
+const devnetPQSeed = "0x5151515151515151515151515151515151515151515151515151515151515151";
+const zeroSalt = "0x0000000000000000000000000000000000000000000000000000000000000000";
+const oldDevnetPQAddress = "33e55502efe1906a008b2b87873ef080ecef14dc";
+const oldDevnetCompatAlloc = [
+  oldDevnetPQAddress,
+  "f39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  "70997970c51812dc3a010c7d01b50e0d17dc79c8",
+  "3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+];
+
+function parseArgs(argv) {
+  const args = {
+    network: process.env.QUBITOR_NETWORK ?? process.env.QUBITOR_NETWORK_PROFILE ?? "devnet",
+    genesis: undefined,
+    deploymentsDir: undefined,
+    skipGeneratedSources: false,
+  };
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--network") args.network = argv[++i];
+    else if (arg === "--genesis") args.genesis = argv[++i];
+    else if (arg === "--deployments-dir") args.deploymentsDir = argv[++i];
+    else if (arg === "--skip-generated-sources") args.skipGeneratedSources = true;
+    else throw new Error(`unsupported argument: ${arg}`);
+  }
+
+  if (!Object.hasOwn(chainIds, args.network)) {
+    throw new Error(`unsupported Qubitor network "${args.network}". Use devnet, testnet, or mainnet.`);
+  }
+  return args;
+}
+
+function readArtifact(contractName) {
+  const artifactPath = resolve(rootDir, `contracts/out/${contractName}.sol/${contractName}.json`);
+  return JSON.parse(readFileSync(artifactPath, "utf8"));
+}
+
+function hexNoPrefix(hex) {
+  if (typeof hex !== "string" || !/^0x[0-9a-fA-F]*$/.test(hex)) {
+    throw new Error(`invalid hex: ${hex}`);
+  }
+  return hex.slice(2);
+}
+
+function addressWord(address) {
+  return hexNoPrefix(getAddress(address)).toLowerCase().padStart(64, "0");
+}
+
+function normalizeBytecode(bytecode) {
+  const object = typeof bytecode === "string" ? bytecode : bytecode?.object;
+  if (typeof object !== "string" || !/^0x[0-9a-fA-F]*$/.test(object)) {
+    throw new Error("artifact bytecode is missing or invalid");
+  }
+  return object.toLowerCase();
+}
+
+function patchImmutableReferences(bytecode, immutableReferences, replacements) {
+  const bytes = hexNoPrefix(bytecode).split("");
+  for (const [immutableId, refs] of Object.entries(immutableReferences ?? {})) {
+    const replacement = replacements[immutableId];
+    if (!replacement) throw new Error(`no replacement provided for immutable ${immutableId}`);
+    const replacementHex = addressWord(replacement);
+    for (const ref of refs) {
+      if (ref.length !== 32) throw new Error(`immutable ${immutableId} has unsupported length ${ref.length}`);
+      const start = ref.start * 2;
+      bytes.splice(start, ref.length * 2, ...replacementHex);
+    }
+  }
+  return `0x${bytes.join("")}`;
+}
+
+function bytesToHex(bytes) {
+  return `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function hexToBytes(hex) {
+  const value = hexNoPrefix(hex);
+  const out = new Uint8Array(value.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = Number.parseInt(value.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+function deriveAccountAddress(accountCreationCode, publicKey, salt = zeroSalt) {
+  const constructorArgs = encodeAbiParameters(
+    [{ type: "bytes" }, { type: "address" }, { type: "address" }],
+    [
+      publicKey,
+      systemContracts.securityModeRegistry,
+      systemContracts.accountReadinessRegistry,
+    ],
+  );
+  const initCodeHash = keccak256(concatHex([accountCreationCode, constructorArgs]));
+  const digest = keccak256(
+    concatHex([
+      `0xff${systemContracts.qubitorAccountFactory.slice(2)}${hexNoPrefix(salt)}${initCodeHash.slice(2)}`,
+    ]),
+  );
+  return getAddress(`0x${digest.slice(-40)}`);
+}
+
+function writeGeneratedSources(accountCreationCode) {
+  const tsPath = resolve(rootDir, "packages/pq-native-tx/src/system-contracts.ts");
+  writeFileSync(
+    tsPath,
+    `// Generated by scripts/devnet/install-system-contracts.mjs. Do not edit by hand.\n` +
+      `import type { Hex } from "viem";\n\n` +
+      `export const QUBITOR_MLDSA65_PRECOMPILE = "${systemContracts.mldsa65Precompile}" as const satisfies Hex;\n` +
+      `export const QUBITOR_SECURITY_MODE_REGISTRY = "${systemContracts.securityModeRegistry}" as const satisfies Hex;\n` +
+      `export const QUBITOR_ACCOUNT_READINESS_REGISTRY = "${systemContracts.accountReadinessRegistry}" as const satisfies Hex;\n` +
+      `export const QUBITOR_ACCOUNT_FACTORY = "${systemContracts.qubitorAccountFactory}" as const satisfies Hex;\n` +
+      `export const QUBITOR_ACCOUNT_CREATION_CODE = "${accountCreationCode}" as const satisfies Hex;\n`,
+  );
+
+  const goPath = resolve(rootDir, "clients/qubitor-node/coregeth/core/types/tx_qubitor_system_contracts_gen.go");
+  writeFileSync(
+    goPath,
+    `// Code generated by scripts/devnet/install-system-contracts.mjs; DO NOT EDIT.\n\n` +
+      `package types\n\n` +
+      `const (\n` +
+      `\tqubitorSystemSecurityModeRegistryHex = "${systemContracts.securityModeRegistry}"\n` +
+      `\tqubitorSystemAccountReadinessRegistryHex = "${systemContracts.accountReadinessRegistry}"\n` +
+      `\tqubitorSystemAccountFactoryHex = "${systemContracts.qubitorAccountFactory}"\n` +
+      `\tqubitorAccountCreationCodeHex = "${accountCreationCode}"\n` +
+      `)\n`,
+  );
+}
+
+function writeDeployments(network, deploymentsDir, devnetAccountAddress) {
+  mkdirSync(deploymentsDir, { recursive: true });
+  const deploymentsFile = resolve(deploymentsDir, "deployments.json");
+  let existing = {};
+  try {
+    existing = JSON.parse(readFileSync(deploymentsFile, "utf8"));
+  } catch {
+    existing = {};
+  }
+
+  const deployments = {
+    chainId: chainIds[network],
+    deploymentMode: "genesis-system-contracts",
+    systemInstalled: true,
+    securityModeRegistry: systemContracts.securityModeRegistry,
+    accountReadinessRegistry: systemContracts.accountReadinessRegistry,
+    qubitorAccountFactory: systemContracts.qubitorAccountFactory,
+    mldsa65Precompile: systemContracts.mldsa65Precompile,
+    devnetPQAccount: network === "devnet" ? devnetAccountAddress : undefined,
+    qubitorNativeBridge: existing.qubitorNativeBridge,
+  };
+
+  writeFileSync(
+    deploymentsFile,
+    `${JSON.stringify(deployments, null, 2)}\n`,
+  );
+}
+
+function updateGenesis(network, genesisPath, systemBytecodes, devnetAccountAddress) {
+  const genesis = JSON.parse(readFileSync(genesisPath, "utf8"));
+  genesis.alloc ??= {};
+
+  if (network === "devnet") {
+    for (const address of oldDevnetCompatAlloc) delete genesis.alloc[address];
+    genesis.alloc[devnetAccountAddress.slice(2).toLowerCase()] = {
+      balance: "100000000000000000000000000",
+    };
+  }
+
+  genesis.alloc[systemContracts.securityModeRegistry.slice(2).toLowerCase()] = {
+    balance: "0x0",
+    code: systemBytecodes.securityModeRegistry,
+  };
+  genesis.alloc[systemContracts.accountReadinessRegistry.slice(2).toLowerCase()] = {
+    balance: "0x0",
+    code: systemBytecodes.accountReadinessRegistry,
+  };
+  genesis.alloc[systemContracts.qubitorAccountFactory.slice(2).toLowerCase()] = {
+    balance: "0x0",
+    code: systemBytecodes.qubitorAccountFactory,
+  };
+
+  writeFileSync(genesisPath, `${JSON.stringify(genesis, null, 2)}\n`);
+}
+
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const genesisPath = resolve(rootDir, args.genesis ?? `clients/qubitor-node/config/${args.network}/genesis.json`);
+  const deploymentsDir = resolve(rootDir, args.deploymentsDir ?? `contracts/deployments/${args.network}`);
+
+  const securityArtifact = readArtifact("SecurityModeRegistry");
+  const readinessArtifact = readArtifact("AccountReadinessRegistry");
+  const factoryArtifact = readArtifact("QubitorAccountFactory");
+  const accountArtifact = readArtifact("QubitorAccount");
+
+  const accountCreationCode = normalizeBytecode(accountArtifact.bytecode);
+  const factoryBytecode = patchImmutableReferences(
+    normalizeBytecode(factoryArtifact.deployedBytecode),
+    factoryArtifact.deployedBytecode.immutableReferences,
+    {
+      532: systemContracts.securityModeRegistry,
+      534: systemContracts.accountReadinessRegistry,
+    },
+  );
+
+  const devnetKeypair = ml_dsa65.keygen(hexToBytes(devnetPQSeed));
+  const devnetPublicKey = bytesToHex(devnetKeypair.publicKey);
+  const devnetAccountAddress = deriveAccountAddress(accountCreationCode, devnetPublicKey);
+
+  if (!args.skipGeneratedSources) writeGeneratedSources(accountCreationCode);
+
+  writeDeployments(args.network, deploymentsDir, devnetAccountAddress);
+  updateGenesis(args.network, genesisPath, {
+    securityModeRegistry: normalizeBytecode(securityArtifact.deployedBytecode),
+    accountReadinessRegistry: normalizeBytecode(readinessArtifact.deployedBytecode),
+    qubitorAccountFactory: factoryBytecode,
+  }, devnetAccountAddress);
+
+  console.log(`[qubitor-system-contracts] ${args.network} system contracts installed into ${genesisPath}`);
+  console.log(`[qubitor-system-contracts] deployments written to ${resolve(deploymentsDir, "deployments.json")}`);
+  if (args.network === "devnet") {
+    console.log(`[qubitor-system-contracts] devnet PQ account ${devnetAccountAddress}`);
+  }
+}
+
+main();

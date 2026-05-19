@@ -1,0 +1,10 @@
+{
+  "chainId": 91337,
+  "deploymentMode": "genesis-system-contracts",
+  "systemInstalled": true,
+  "securityModeRegistry": "0x0000000000000000000000000000000000000201",
+  "accountReadinessRegistry": "0x0000000000000000000000000000000000000202",
+  "qubitorAccountFactory": "0x0000000000000000000000000000000000000203",
+  "mldsa65Precompile": "0x0000000000000000000000000000000000000100",
+  "devnetPQAccount": "0x587292b9914D42FB8708bA2108e846609Ba23d89"
+}

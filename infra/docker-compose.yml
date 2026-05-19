@@ -1,0 +1,172 @@
+name: qubitor-network
+
+x-node-service: &node-service
+  image: node:20
+  working_dir: /repo
+  volumes:
+    - ..:/repo
+  restart: unless-stopped
+
+x-service-env: &service-env
+  CI: "true"
+  QUBITOR_NETWORK: ${QUBITOR_NETWORK:-devnet}
+  QUBITOR_EOA_TXS: ${QUBITOR_EOA_TXS:-0}
+  QUBITOR_RPC_URL: http://qubitor-node:8545
+  QUBITOR_DEPLOYMENTS_FILE: /repo/contracts/deployments/${QUBITOR_NETWORK:-devnet}/deployments.json
+  QUBITOR_FAUCET_STATUS_URL: http://faucet-api:18546/faucet/status
+  QUBITOR_FAUCET_ADDRESS: ${QUBITOR_FAUCET_ADDRESS:-}
+  QUBITOR_INDEXER_URL: http://indexer:18549
+
+services:
+  qubitor-node:
+    build:
+      context: ../clients/qubitor-node/coregeth
+      dockerfile: Dockerfile
+    image: ${QUBITOR_COREGETH_IMAGE:-qubitor/qubitor-geth:devnet}
+    entrypoint: []
+    command:
+      - sh
+      - -lc
+      - |
+        if [ ! -d /data/geth/chaindata ]; then
+          geth init --datadir=/data /genesis.json
+        fi
+        set -- geth \
+          --datadir=/data \
+          --networkid="$${QUBITOR_NETWORK_ID}" \
+          --http \
+          --http.addr=0.0.0.0 \
+          --http.port=8545 \
+          --http.api=eth,net,web3,qubitor,txpool,miner,admin,debug \
+          --http.corsdomain='*' \
+          --http.vhosts='*' \
+          --ws \
+          --ws.addr=0.0.0.0 \
+          --ws.port=8546 \
+          --ws.api=eth,net,web3 \
+          --mine \
+          --miner.threads="$${QUBITOR_MINER_THREADS}" \
+          --miner.etherbase="$${QUBITOR_MINER_ETHERBASE}" \
+          --miner.gaslimit="$${QUBITOR_MINER_GASLIMIT}" \
+          --verbosity=3
+        if [ -n "$${QUBITOR_P2P_NAT:-}" ]; then
+          set -- "$$@" --nat "$${QUBITOR_P2P_NAT}"
+        fi
+        if [ -n "$${QUBITOR_NODEKEY_FILE:-}" ]; then
+          set -- "$$@" --nodekey "$${QUBITOR_NODEKEY_FILE}"
+        fi
+        if [ -n "$${QUBITOR_BOOTNODES:-}" ]; then
+          set -- "$$@" --bootnodes "$${QUBITOR_BOOTNODES}"
+        elif [ "$${QUBITOR_DISCOVERY:-0}" != "1" ]; then
+          set -- "$$@" --nodiscover
+        fi
+        exec "$$@"
+    environment:
+      QUBITOR_NETWORK: ${QUBITOR_NETWORK:-devnet}
+      QUBITOR_NETWORK_ID: ${QUBITOR_NETWORK_ID:-91337}
+      QUBITOR_EOA_TXS: ${QUBITOR_EOA_TXS:-0}
+      QUBITOR_DISCOVERY: ${QUBITOR_DISCOVERY:-0}
+      QUBITOR_BOOTNODES: ${QUBITOR_BOOTNODES:-}
+      QUBITOR_P2P_NAT: ${QUBITOR_P2P_NAT:-}
+      QUBITOR_NODEKEY_FILE: ${QUBITOR_DOCKER_NODEKEY_FILE:-}
+      QUBITOR_MINER_THREADS: ${QUBITOR_MINER_THREADS:-1}
+      QUBITOR_MINER_ETHERBASE: ${QUBITOR_MINER_ETHERBASE:-0x587292b9914D42FB8708bA2108e846609Ba23d89}
+      QUBITOR_MINER_GASLIMIT: ${QUBITOR_MINER_GASLIMIT:-30000000}
+    volumes:
+      - ${QUBITOR_GENESIS_HOST_FILE:-../clients/qubitor-node/config/devnet/genesis.json}:/genesis.json:ro
+      - ${QUBITOR_NODEKEY_HOST_FILE:-../clients/qubitor-node/config/devnet/genesis.json}:/nodekey:ro
+      - ../data/node/${QUBITOR_NETWORK:-devnet}:/data
+    ports:
+      - "${QUBITOR_NODE_RPC_PORT:-8545}:8545"
+      - "${QUBITOR_NODE_WS_PORT:-8546}:8546"
+      - "${QUBITOR_P2P_TCP_PORT:-30303}:30303"
+      - "${QUBITOR_P2P_UDP_PORT:-30303}:30303/udp"
+    restart: unless-stopped
+    profiles: ["node", "all"]
+
+  rpc-gateway:
+    <<: *node-service
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm rpc:start"
+    environment:
+      <<: *service-env
+      QUBITOR_RPC_GATEWAY_PORT: 18545
+    ports:
+      - "${QUBITOR_RPC_GATEWAY_PORT:-18545}:18545"
+    depends_on:
+      - qubitor-node
+    profiles: ["services", "all"]
+
+  faucet-api:
+    <<: *node-service
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm faucet:start"
+    environment:
+      <<: *service-env
+      QUBITOR_FAUCET_PORT: 18546
+      QUBITOR_FAUCET_AMOUNT_WEI: ${QUBITOR_FAUCET_AMOUNT_WEI:-10000000000000000000}
+      QUBITOR_FAUCET_TREASURY_MODE: ${QUBITOR_FAUCET_TREASURY_MODE:-pq-native-devnet}
+      QUBITOR_FAUCET_PQ_SEED: ${QUBITOR_FAUCET_PQ_SEED:-}
+    ports:
+      - "${QUBITOR_FAUCET_PORT:-18546}:18546"
+    depends_on:
+      - qubitor-node
+    profiles: ["services", "all"]
+
+  pq-relayer-api:
+    <<: *node-service
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm pq-relayer:start"
+    environment:
+      <<: *service-env
+      QUBITOR_PQ_RELAYER_PORT: 18548
+      QUBITOR_PQ_RELAYER_WAIT_FOR_RECEIPT: ${QUBITOR_PQ_RELAYER_WAIT_FOR_RECEIPT:-1}
+    ports:
+      - "${QUBITOR_PQ_RELAYER_PORT:-18548}:18548"
+    depends_on:
+      - qubitor-node
+    profiles: ["services", "all"]
+
+  indexer:
+    <<: *node-service
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm indexer:start"
+    environment:
+      <<: *service-env
+      QUBITOR_INDEXER_PORT: 18549
+      QUBITOR_INDEXER_DATA_DIR: /data/indexer
+      QUBITOR_INDEXER_POLL_MS: ${QUBITOR_INDEXER_POLL_MS:-4000}
+    volumes:
+      - ..:/repo
+      - ../data/indexer/${QUBITOR_NETWORK:-devnet}:/data/indexer
+    ports:
+      - "${QUBITOR_INDEXER_PORT:-18549}:18549"
+    depends_on:
+      - qubitor-node
+    profiles: ["services", "all"]
+
+  explorer-lite:
+    <<: *node-service
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm explorer:start"
+    environment:
+      <<: *service-env
+      QUBITOR_EXPLORER_PORT: 18547
+    ports:
+      - "${QUBITOR_EXPLORER_PORT:-18547}:18547"
+    depends_on:
+      - rpc-gateway
+      - faucet-api
+      - indexer
+    profiles: ["services", "all"]
+
+  proof-pack:
+    <<: *node-service
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm devnet:proof-pack"
+    environment:
+      <<: *service-env
+      QUBITOR_RPC_GATEWAY_URL: http://rpc-gateway:18545/rpc
+      QUBITOR_EXPLORER_URL: http://explorer-lite:18547
+      QUBITOR_PROOF_PACK_DIR: /repo/artifacts/proofs/${QUBITOR_NETWORK:-devnet}
+    depends_on:
+      - rpc-gateway
+      - faucet-api
+      - pq-relayer-api
+      - indexer
+      - explorer-lite
+    profiles: ["proofs"]

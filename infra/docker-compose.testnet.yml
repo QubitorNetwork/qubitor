@@ -1,0 +1,58 @@
+name: qubitor-network-testnet
+
+services:
+  qubitor-node:
+    image: ${QUBITOR_COREGETH_IMAGE:-qubitor/qubitor-geth:testnet}
+    environment:
+      QUBITOR_NETWORK: testnet
+      QUBITOR_NETWORK_ID: ${QUBITOR_NETWORK_ID:-91338}
+      QUBITOR_EOA_TXS: "0"
+      QUBITOR_DISCOVERY: ${QUBITOR_DISCOVERY:-1}
+      QUBITOR_BOOTNODES: ${QUBITOR_BOOTNODES:-}
+      QUBITOR_MINER_ETHERBASE: ${QUBITOR_MINER_ETHERBASE:-}
+    volumes:
+      - ${QUBITOR_GENESIS_HOST_FILE:-../clients/qubitor-node/config/testnet/genesis.json}:/genesis.json:ro
+      - ../data/node/testnet:/data
+
+  rpc-gateway:
+    environment:
+      QUBITOR_NETWORK: testnet
+      QUBITOR_EOA_TXS: "0"
+      QUBITOR_DEPLOYMENTS_FILE: /repo/contracts/deployments/testnet/deployments.json
+
+  faucet-api:
+    environment:
+      QUBITOR_NETWORK: testnet
+      QUBITOR_EOA_TXS: "0"
+      QUBITOR_DEPLOYMENTS_FILE: /repo/contracts/deployments/testnet/deployments.json
+      QUBITOR_FAUCET_AMOUNT_WEI: ${QUBITOR_FAUCET_AMOUNT_WEI:-1000000000000000000}
+      QUBITOR_FAUCET_TREASURY_MODE: ${QUBITOR_FAUCET_TREASURY_MODE:-pq-controlled-testnet}
+      QUBITOR_FAUCET_TREASURY_VAULT: ${QUBITOR_FAUCET_TREASURY_VAULT:-}
+
+  pq-relayer-api:
+    environment:
+      QUBITOR_NETWORK: testnet
+      QUBITOR_EOA_TXS: "0"
+      QUBITOR_DEPLOYMENTS_FILE: /repo/contracts/deployments/testnet/deployments.json
+
+  indexer:
+    environment:
+      QUBITOR_NETWORK: testnet
+      QUBITOR_EOA_TXS: "0"
+      QUBITOR_DEPLOYMENTS_FILE: /repo/contracts/deployments/testnet/deployments.json
+    volumes:
+      - ..:/repo
+      - ../data/indexer/testnet:/data/indexer
+
+  explorer-lite:
+    environment:
+      QUBITOR_NETWORK: testnet
+      QUBITOR_EOA_TXS: "0"
+      QUBITOR_DEPLOYMENTS_FILE: /repo/contracts/deployments/testnet/deployments.json
+
+  proof-pack:
+    environment:
+      QUBITOR_NETWORK: testnet
+      QUBITOR_EOA_TXS: "0"
+      QUBITOR_DEPLOYMENTS_FILE: /repo/contracts/deployments/testnet/deployments.json
+      QUBITOR_PROOF_PACK_DIR: /repo/artifacts/proofs/testnet

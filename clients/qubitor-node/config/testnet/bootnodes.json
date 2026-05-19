@@ -1,0 +1,6 @@
+{
+  "network": "testnet",
+  "chainId": 91338,
+  "status": "launch-candidate-placeholder",
+  "bootnodes": []
+}

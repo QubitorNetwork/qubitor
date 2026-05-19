@@ -1,0 +1,19 @@
+{
+  "chainId": 91338,
+  "deploymentMode": "genesis-system-contracts",
+  "systemInstalled": true,
+  "securityModeRegistry": "0x0000000000000000000000000000000000000201",
+  "accountReadinessRegistry": "0x0000000000000000000000000000000000000202",
+  "qubitorAccountFactory": "0x0000000000000000000000000000000000000203",
+  "mldsa65Precompile": "0x0000000000000000000000000000000000000100",
+  "qubitorNativeBridge": {
+    "registry": "0x0000000000000000000000000000000000000301",
+    "guardianVerifier": "0x0000000000000000000000000000000000000302",
+    "nativeBridgeVault": "0x0000000000000000000000000000000000000303",
+    "bridgeAdmin": "0x7DeB434c79bD02A5E8AAA8f1929064f01aFC2aE9",
+    "bridgeGuardian": "0x7DeB434c79bD02A5E8AAA8f1929064f01aFC2aE9",
+    "initialNativeLiquidityWei": "1000000000000000000000000",
+    "deploymentMode": "genesis-native-bridge-contracts",
+    "guardianGasBalanceWei": "1000000000000000000000"
+  }
+}

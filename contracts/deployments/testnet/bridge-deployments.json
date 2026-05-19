@@ -1,0 +1,25 @@
+{
+  "chainId": 91338,
+  "deploymentMode": "genesis-native-bridge-contracts",
+  "noPermanentEOAAdmin": true,
+  "bridgeAdmin": "0x7DeB434c79bD02A5E8AAA8f1929064f01aFC2aE9",
+  "bridgeGuardian": "0x7DeB434c79bD02A5E8AAA8f1929064f01aFC2aE9",
+  "qubitorBridgeContracts": {
+    "registry": "0x0000000000000000000000000000000000000301",
+    "guardianVerifier": "0x0000000000000000000000000000000000000302",
+    "nativeBridgeVault": "0x0000000000000000000000000000000000000303"
+  },
+  "config": {
+    "qubitorChainId": "91338",
+    "sepoliaChainId": "11155111",
+    "sepoliaQBT": "0x5987384F96b17B00571696141192Bdc91CcDAA84",
+    "minBridgeAmountWei": "1000000000000000000",
+    "maxSingleTransferWei": "100000000000000000000000",
+    "dailyTransferCapWei": "500000000000000000000000",
+    "bridgeFeeBps": "30",
+    "refundDelaySeconds": "604800",
+    "guardianMode": "devnet_single",
+    "initialNativeLiquidityWei": "1000000000000000000000000",
+    "guardianGasBalanceWei": "1000000000000000000000"
+  }
+}

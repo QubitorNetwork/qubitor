@@ -1,0 +1,32 @@
+{
+  "name": "@qubitor/sdk",
+  "version": "0.1.1",
+  "private": false,
+  "description": "Official Qubitor SDK for QBT balances, PQ-native accounts, Qubitor RPC, and wallet integration.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @qubitor/chain-config build && pnpm --filter @qubitor/pq-native-tx build && tsx src/index.test.ts"
+  },
+  "dependencies": {
+    "@qubitor/chain-config": "workspace:*",
+    "@qubitor/pq-native-tx": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}
