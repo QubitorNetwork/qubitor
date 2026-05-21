@@ -11,6 +11,9 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 const apiBase = "https://discord.com/api/v10";
 const envFile = process.env.DISCORD_ENV_FILE || path.join(repoRoot, "infra", ".env.discord.local");
 const dryRun = process.env.DISCORD_DRY_RUN === "1" || process.argv.includes("--dry-run");
+const verificationPortalUrl =
+  process.env.DISCORD_VERIFY_PORTAL_URL ??
+  `${(process.env.DISCORD_VERIFY_PUBLIC_BASE_URL ?? "https://testrpc.qubitor.org").replace(/\/+$/, "")}/verify`;
 
 const channelTypes = {
   text: 0,
@@ -110,6 +113,7 @@ function createPrivateOverwrites(guildId, roleIds) {
 const roleSpecs = [
   { name: "Core Team", color: 0x49d0a8, hoist: true, mentionable: false },
   { name: "Moderator", color: 0x6ea8fe, hoist: true, mentionable: false },
+  { name: "Verified", color: 0x49d0a8, hoist: false, mentionable: false },
   { name: "Builder", color: 0xf1c40f, hoist: false, mentionable: true },
   { name: "Miner", color: 0xe67e22, hoist: false, mentionable: true },
   { name: "Wallet Tester", color: 0x9b59b6, hoist: false, mentionable: true },
@@ -146,6 +150,7 @@ const channelSpecs = [
       "- Explorer: https://testexplorer.qubitor.org",
       "- Faucet: https://testrpc.qubitor.org/faucet",
       "- GitHub: https://github.com/QubitorNetwork/qubitor",
+      `- Member verification: ${verificationPortalUrl}`,
     ],
   },
   {
@@ -160,6 +165,18 @@ const channelSpecs = [
       "3. Keep testnet support in public channels so answers help everyone.",
       "4. Be direct, useful, and respectful.",
       "5. Testnet assets have no mainnet value.",
+    ],
+  },
+  {
+    name: "verify",
+    category: "start",
+    topic: "Verify your Discord member access.",
+    seed: [
+      "Verify your Qubitor Discord access here:",
+      "",
+      verificationPortalUrl,
+      "",
+      "The portal signs you in with Discord and adds the Verified role after confirming you are in this server.",
     ],
   },
   {

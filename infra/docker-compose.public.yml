@@ -55,6 +55,9 @@ services:
           handle /pq-dev* {
             reverse_proxy pq-relayer-api:18548
           }
+          handle /verify* {
+            reverse_proxy discord-verification:18550
+          }
           handle /faucet* {
             reverse_proxy faucet-api:18546
           }
@@ -97,6 +100,7 @@ services:
     depends_on:
       - rpc-gateway
       - pq-relayer-api
+      - discord-verification
       - faucet-api
       - explorer-lite
     profiles: ["public", "all"]
