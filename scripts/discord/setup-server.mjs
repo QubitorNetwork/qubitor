@@ -356,7 +356,7 @@ const channelSpecs = [
       "https://testrpc.qubitor.org/rpc",
       "```",
       "",
-      "Public endpoints should never require admin RPC methods or private node access.",
+      "Use this RPC for apps, wallets, and simple scripts. Node/admin endpoints stay on operator machines.",
     ],
   },
   {
