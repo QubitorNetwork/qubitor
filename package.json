@@ -49,6 +49,7 @@
     "indexer:start": "pnpm --filter @qubitor/indexer dev",
     "sdk:pack": "bash scripts/npm/publish-sdk-stack.sh --dry-run",
     "sdk:publish": "bash scripts/npm/publish-sdk-stack.sh",
+    "discord:setup": "node scripts/discord/setup-server.mjs",
     "testnet:bridge-genesis:verify": "node scripts/testnet/verify-bridge-genesis.mjs",
     "testnet:reset-with-bridge-genesis": "bash scripts/testnet/reset-with-bridge-genesis.sh"
   },
