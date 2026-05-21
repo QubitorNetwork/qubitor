@@ -22,6 +22,7 @@ const channelTypes = {
 
 const overwriteTypes = {
   role: 0,
+  member: 1,
 };
 
 const permissions = {
@@ -87,27 +88,100 @@ function permissionBits(...bits) {
   return bits.reduce((total, bit) => total | bit, 0n).toString();
 }
 
-function createPrivateOverwrites(guildId, roleIds) {
-  const allowed = permissionBits(
-    permissions.viewChannel,
-    permissions.sendMessages,
-    permissions.readMessageHistory,
-  );
+function createRoleOverwrite(roleId, allow, deny = 0n) {
+  return {
+    id: roleId,
+    type: overwriteTypes.role,
+    allow: allow.toString(),
+    deny: deny.toString(),
+  };
+}
+
+function createMemberOverwrite(memberId, allow, deny = 0n) {
+  return {
+    id: memberId,
+    type: overwriteTypes.member,
+    allow: allow.toString(),
+    deny: deny.toString(),
+  };
+}
+
+function createOverwriteContext(roleByName) {
+  const staffRoleIds = [roleByName.get("Core Team")?.id, roleByName.get("Moderator")?.id].filter(Boolean);
+  const verifiedRoleId = roleByName.get("Verified")?.id;
+  return { staffRoleIds, verifiedRoleId };
+}
+
+function createStaffOverwrites(roleByName) {
+  const { staffRoleIds } = createOverwriteContext(roleByName);
+  const staffAllowed =
+    permissions.viewChannel |
+    permissions.sendMessages |
+    permissions.readMessageHistory;
 
   return [
-    {
-      id: guildId,
-      type: overwriteTypes.role,
-      allow: "0",
-      deny: permissionBits(permissions.viewChannel),
-    },
-    ...roleIds.map((roleId) => ({
-      id: roleId,
-      type: overwriteTypes.role,
-      allow: allowed,
-      deny: "0",
-    })),
+    ...staffRoleIds.map((roleId) => createRoleOverwrite(roleId, staffAllowed)),
+    createMemberOverwrite(botUser.id, staffAllowed),
   ];
+}
+
+function createEntryReadOnlyOverwrites(guildId, roleByName) {
+  const readOnlyAllowed = permissions.viewChannel | permissions.readMessageHistory;
+  return [
+    createRoleOverwrite(guildId, readOnlyAllowed, permissions.sendMessages),
+    ...createStaffOverwrites(roleByName),
+    ...createAutomationOverwrites(roleByName),
+  ];
+}
+
+function createAutomationOverwrites(roleByName) {
+  const automationAllowed =
+    permissions.viewChannel |
+    permissions.sendMessages |
+    permissions.readMessageHistory;
+  return ["AuthGG"].flatMap((roleName) => {
+    const role = roleByName.get(roleName);
+    return role ? [createRoleOverwrite(role.id, automationAllowed)] : [];
+  });
+}
+
+function createVerifiedOverwrites(guildId, roleByName, readOnly = false) {
+  const { verifiedRoleId } = createOverwriteContext(roleByName);
+  const readAllowed = permissions.viewChannel | permissions.readMessageHistory;
+  const writeAllowed = readAllowed | permissions.sendMessages;
+  const overwrites = [
+    createRoleOverwrite(guildId, 0n, permissions.viewChannel),
+    ...createStaffOverwrites(roleByName),
+  ];
+
+  if (verifiedRoleId) {
+    overwrites.push(createRoleOverwrite(verifiedRoleId, readOnly ? readAllowed : writeAllowed, readOnly ? permissions.sendMessages : 0n));
+  }
+
+  return overwrites;
+}
+
+function createPrivateOverwrites(guildId, roleByName) {
+  return [
+    createRoleOverwrite(guildId, 0n, permissions.viewChannel),
+    ...createStaffOverwrites(roleByName),
+  ];
+}
+
+function overwritesForAccess(access, guildId, roleByName) {
+  if (access === "private") {
+    return createPrivateOverwrites(guildId, roleByName);
+  }
+
+  if (access === "verified") {
+    return createVerifiedOverwrites(guildId, roleByName);
+  }
+
+  if (access === "verified-readonly") {
+    return createVerifiedOverwrites(guildId, roleByName, true);
+  }
+
+  return createEntryReadOnlyOverwrites(guildId, roleByName);
 }
 
 const roleSpecs = [
@@ -123,22 +197,23 @@ const roleSpecs = [
 ];
 
 const categorySpecs = [
-  { key: "start", name: "Start Here" },
-  { key: "official", name: "Official" },
-  { key: "testnet", name: "Testnet" },
-  { key: "mining", name: "Mining" },
-  { key: "wallet", name: "Wallet" },
-  { key: "bridge", name: "Bridge" },
-  { key: "developers", name: "Developers" },
-  { key: "community", name: "Community" },
-  { key: "support", name: "Support" },
-  { key: "moderation", name: "Moderation" },
+  { key: "start", name: "Start Here", access: "entry" },
+  { key: "official", name: "Official", access: "official" },
+  { key: "testnet", name: "Testnet", access: "verified" },
+  { key: "mining", name: "Mining", access: "verified" },
+  { key: "wallet", name: "Wallet", access: "verified" },
+  { key: "bridge", name: "Bridge", access: "verified" },
+  { key: "developers", name: "Developers", access: "verified" },
+  { key: "community", name: "Community", access: "verified" },
+  { key: "support", name: "Support", access: "verified" },
+  { key: "moderation", name: "Moderation", access: "private" },
 ];
 
 const channelSpecs = [
   {
     name: "welcome",
     category: "start",
+    access: "entry-readonly",
     topic: "Start here for Qubitor links, network details, and community basics.",
     seed: [
       "Welcome to Qubitor.",
@@ -156,6 +231,7 @@ const channelSpecs = [
   {
     name: "rules",
     category: "start",
+    access: "entry-readonly",
     topic: "Community rules.",
     seed: [
       "Qubitor community rules:",
@@ -170,6 +246,7 @@ const channelSpecs = [
   {
     name: "verify",
     category: "start",
+    access: "entry-readonly",
     topic: "Verify your Discord member access.",
     seed: [
       "Verify your Qubitor Discord access here:",
@@ -182,6 +259,7 @@ const channelSpecs = [
   {
     name: "announcements",
     category: "official",
+    access: "entry-readonly",
     topic: "Official Qubitor announcements.",
     seed: [
       "Official Qubitor announcements will be posted here.",
@@ -192,6 +270,7 @@ const channelSpecs = [
   {
     name: "status",
     category: "official",
+    access: "entry-readonly",
     topic: "Network, RPC, explorer, faucet, and bridge status.",
     seed: [
       "Status links:",
@@ -205,6 +284,7 @@ const channelSpecs = [
   {
     name: "testnet-status",
     category: "testnet",
+    access: "verified-readonly",
     topic: "Qubitor testnet chain details.",
     seed: [
       "Qubitor Testnet",
@@ -416,6 +496,7 @@ const channelSpecs = [
   {
     name: "mod-log",
     category: "moderation",
+    access: "private",
     topic: "Private moderation log.",
     private: true,
     seed: [
@@ -425,6 +506,7 @@ const channelSpecs = [
   {
     name: "admin-room",
     category: "moderation",
+    access: "private",
     topic: "Private admin coordination.",
     private: true,
     seed: [
@@ -498,50 +580,62 @@ async function ensureRole(existingRoles, spec) {
   return created;
 }
 
-async function ensureCategory(existingChannels, spec, position) {
+async function tuneChannel(channel, patch, label) {
+  await discordRequest("PATCH", `/channels/${channel.id}`, patch);
+  log(`${label} tuned`);
+  return { ...channel, ...patch };
+}
+
+async function ensureCategory(existingChannels, spec, roleByName, position) {
   const existing = existingChannels.find(
     (channel) =>
       channel.type === channelTypes.category &&
       normalizeName(channel.name) === normalizeName(spec.name),
   );
+  const permission_overwrites = overwritesForAccess(spec.access, guildId, roleByName);
   if (existing) {
     log(`category exists: ${spec.name}`);
-    return existing;
+    return tuneChannel(existing, { position, permission_overwrites }, `category ${spec.name}`);
   }
 
   const created = await discordRequest("POST", `/guilds/${guildId}/channels`, {
     name: spec.name,
     type: channelTypes.category,
     position,
+    permission_overwrites,
   });
   log(`category created: ${spec.name}`);
   existingChannels.push(created);
   return created;
 }
 
-async function ensureTextChannel(existingChannels, spec, category, roleByName, position) {
+async function ensureTextChannel(existingChannels, spec, category, categorySpec, roleByName, position) {
   const existing = existingChannels.find(
     (channel) =>
       channel.type === channelTypes.text &&
       normalizeName(channel.name) === normalizeName(spec.name),
   );
+  const channelAccess = spec.access ?? categorySpec.access;
+  const permission_overwrites = overwritesForAccess(channelAccess, guildId, roleByName);
+  const patch = {
+    parent_id: category.id,
+    topic: spec.topic,
+    permission_overwrites,
+  };
+
   if (existing) {
     log(`channel exists: #${spec.name}`);
-    return existing;
+    return tuneChannel(existing, patch, `channel #${spec.name}`);
   }
 
-  const privateRoleIds = [roleByName.get("Core Team")?.id, roleByName.get("Moderator")?.id].filter(Boolean);
   const body = {
     name: spec.name,
     type: channelTypes.text,
     parent_id: category.id,
     position,
     topic: spec.topic,
+    permission_overwrites,
   };
-
-  if (spec.private) {
-    body.permission_overwrites = createPrivateOverwrites(guildId, privateRoleIds);
-  }
 
   const created = await discordRequest("POST", `/guilds/${guildId}/channels`, body);
   log(`channel created: #${spec.name}`);
@@ -647,9 +741,10 @@ async function main() {
   const roleByName = new Map(roles.map((role) => [role.name, role]));
   let channels = await listChannels();
   const categoryByKey = new Map();
+  const categorySpecByKey = new Map(categorySpecs.map((spec) => [spec.key, spec]));
 
   for (const [index, spec] of categorySpecs.entries()) {
-    const category = await ensureCategory(channels, spec, index);
+    const category = await ensureCategory(channels, spec, roleByName, index);
     categoryByKey.set(spec.key, category);
   }
 
@@ -658,11 +753,15 @@ async function main() {
 
   for (const [index, spec] of channelSpecs.entries()) {
     const category = categoryByKey.get(spec.category);
+    const categorySpec = categorySpecByKey.get(spec.category);
     if (!category) {
       throw new Error(`missing category for ${spec.name}: ${spec.category}`);
     }
+    if (!categorySpec) {
+      throw new Error(`missing category spec for ${spec.name}: ${spec.category}`);
+    }
 
-    const channel = await ensureTextChannel(channels, spec, category, roleByName, index);
+    const channel = await ensureTextChannel(channels, spec, category, categorySpec, roleByName, index);
     createdChannels.push({ channel, spec });
   }
 
