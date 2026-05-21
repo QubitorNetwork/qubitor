@@ -175,12 +175,12 @@ function createVerifiedOverwrites(guildId, roleByName, readOnly = false) {
     permissions.embedLinks |
     permissions.attachFiles;
   const overwrites = [
-    createRoleOverwrite(guildId, 0n, permissions.viewChannel),
+    createRoleOverwrite(guildId, readAllowed, permissions.sendMessages),
     ...createStaffOverwrites(roleByName),
   ];
 
-  if (verifiedRoleId) {
-    overwrites.push(createRoleOverwrite(verifiedRoleId, readOnly ? readAllowed : writeAllowed, readOnly ? permissions.sendMessages : 0n));
+  if (verifiedRoleId && !readOnly) {
+    overwrites.push(createRoleOverwrite(verifiedRoleId, writeAllowed));
   }
 
   return overwrites;
