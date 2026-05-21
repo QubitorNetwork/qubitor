@@ -18,6 +18,7 @@ const verificationPortalUrl =
 const channelTypes = {
   text: 0,
   category: 4,
+  forum: 15,
 };
 
 const overwriteTypes = {
@@ -550,6 +551,13 @@ const channelSpecs = [
     ],
   },
   {
+    name: "forum",
+    type: "forum",
+    category: "community",
+    topic: "Longer Qubitor discussions, questions, proposals, and testnet writeups.",
+    tags: ["Question", "Idea", "Build", "Mining", "Wallet", "Bridge", "Docs"],
+  },
+  {
     name: "introductions",
     category: "community",
     topic: "Introduce yourself to the Qubitor community.",
@@ -730,36 +738,48 @@ async function ensureCategory(existingChannels, spec, roleByName, position) {
   return created;
 }
 
-async function ensureTextChannel(existingChannels, spec, category, categorySpec, roleByName, position) {
-  const existing = existingChannels.find(
-    (channel) =>
-      channel.type === channelTypes.text &&
-      normalizeName(channel.name) === normalizeName(spec.name),
-  );
+function createChannelPatch(spec, category, categorySpec, roleByName) {
   const channelAccess = spec.access ?? categorySpec.access;
-  const permission_overwrites = overwritesForAccess(channelAccess, guildId, roleByName);
   const patch = {
     parent_id: category.id,
     topic: spec.topic,
-    permission_overwrites,
+    permission_overwrites: overwritesForAccess(channelAccess, guildId, roleByName),
   };
 
+  if (spec.type === "forum") {
+    patch.available_tags = spec.tags.map((name) => ({ name, moderated: false }));
+    patch.default_sort_order = 0;
+    patch.default_forum_layout = 1;
+  }
+
+  return patch;
+}
+
+async function ensureManagedChannel(existingChannels, spec, category, categorySpec, roleByName, position) {
+  const type = spec.type === "forum" ? channelTypes.forum : channelTypes.text;
+  const existing = existingChannels.find(
+    (channel) =>
+      channel.type === type &&
+      normalizeName(channel.name) === normalizeName(spec.name),
+  );
+  const patch = createChannelPatch(spec, category, categorySpec, roleByName);
+
   if (existing) {
-    log(`channel exists: #${spec.name}`);
+    log(`${spec.type === "forum" ? "forum" : "channel"} exists: #${spec.name}`);
     return tuneChannel(existing, patch, `channel #${spec.name}`);
   }
 
   const body = {
     name: spec.name,
-    type: channelTypes.text,
+    type,
     parent_id: category.id,
     position,
     topic: spec.topic,
-    permission_overwrites,
+    ...patch,
   };
 
   const created = await discordRequest("POST", `/guilds/${guildId}/channels`, body);
-  log(`channel created: #${spec.name}`);
+  log(`${spec.type === "forum" ? "forum" : "channel"} created: #${spec.name}`);
   existingChannels.push(created);
   return created;
 }
@@ -883,7 +903,7 @@ async function main() {
       throw new Error(`missing category spec for ${spec.name}: ${spec.category}`);
     }
 
-    const channel = await ensureTextChannel(channels, spec, category, categorySpec, roleByName, index);
+    const channel = await ensureManagedChannel(channels, spec, category, categorySpec, roleByName, index);
     createdChannels.push({ channel, spec });
   }
 
