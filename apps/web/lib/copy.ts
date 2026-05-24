@@ -1,7 +1,7 @@
 export const BRAND = {
   name: "Qubitor",
   tagline: "A post-quantum security layer for value.",
-  chainId: 91337,
+  chainId: 91338,
   gasCoin: "QBT",
   precompile: "0x0000000000000000000000000000000000000100",
   consensus: "PoW EVM · CoreGeth fork",
@@ -13,16 +13,13 @@ export const BRAND = {
 // before going live. The current values are stubs derived from the existing
 // research repo and may not match the production org.
 export const LINKS = {
-  // TODO(launch): point at the canonical Qubitor docs URL
-  docs: "https://github.com/Quantx256hash/QubitorNetwork/tree/main/docs",
-  // TODO(launch): point at the canonical Qubitor org repo
-  github: "https://github.com/Quantx256hash/QubitorNetwork",
+  docs: "https://docs.qubitor.org",
+  github: "https://github.com/QubitorNetwork/qubitor",
   // TODO(launch): real X/Twitter handle
   twitter: "https://x.com/qubitornetwork",
   // TODO(launch): real Telegram/Discord URL
   community: "https://t.me/qubitornetwork",
-  threatModel:
-    "https://github.com/Quantx256hash/QubitorNetwork/blob/main/docs/security/threat-model.md",
+  threatModel: "https://docs.qubitor.org/security/threat-model",
 };
 
 export const HERO = {
@@ -32,10 +29,10 @@ export const HERO = {
     "Qubitor is a mineable EVM L1 with ML-DSA-native smart accounts. No EOA anywhere.",
   ctas: [
     { label: "Read Docs", href: "#cta", external: false },
-    { label: "View GitHub", href: "https://github.com/Quantx256hash/QubitorNetwork", external: true },
+    { label: "View GitHub", href: "https://github.com/QubitorNetwork/qubitor", external: true },
     { label: "Join Community", href: "#cta", external: false },
   ],
-  reticle: `CHAIN ID 91337 · DEVNET LIVE`,
+  reticle: `CHAIN ID 91338 · TESTNET LIVE`,
 };
 
 export const QUANTUM_RISK = {
@@ -83,7 +80,7 @@ export const NETWORK = {
     "Mineable proof-of-work, standard Ethereum JSON-RPC, plus Qubitor helper methods for PQ transaction submission. Legacy Ethereum transaction types are disabled on Qubitor-native networks.",
   ],
   tiles: [
-    { label: "Chain ID", value: "91337", note: "Devnet" },
+    { label: "Chain ID", value: "91338", note: "Testnet" },
     { label: "Gas coin", value: "QBT", note: "Native, paid by the account" },
     { label: "Consensus", value: "PoW EVM", note: "CoreGeth fork" },
     { label: "PQ verifier", value: "0x…0100", note: "ML-DSA-65 precompile" },
