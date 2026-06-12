@@ -35,6 +35,7 @@ The gate checks that:
 - testnet runtime material sets `QUBITOR_EOA_TXS=0` and contains no EOA private-key variables.
 - generated PQ service-wallet material contains the faucet/miner treasury addresses used by the runtime env.
 - generated bootnode material can describe one or more public bootnodes with distinct advertised endpoints.
+- peer guard and peer-diversity checks exist so official nodes do not mine isolated forks.
 - the admin-control inventory keeps protocol/admin authority behind Qubitor Accounts or stricter PQ policy.
 
 ## Compose Baseline
@@ -90,6 +91,38 @@ Verify the bridge genesis before and after boot:
 pnpm testnet:bridge-genesis:verify
 QUBITOR_TESTNET_VERIFY_RPC_URL=http://127.0.0.1:8545 pnpm testnet:bridge-genesis:verify
 ```
+
+## Peer Split Prevention
+
+Official nodes must keep each other configured as required peers. New miners
+should sync first, verify the genesis hash, verify `net_peerCount >= 1`, and
+compare a recent block hash with the public RPC before mining.
+
+Check public peer and recent miner diversity without changing chain state:
+
+```sh
+pnpm testnet:peer-diversity:check
+```
+
+If official nodes split or mine while isolated, repair peering without resetting
+or rewriting chain data:
+
+```sh
+pnpm testnet:peer-repair:status
+pnpm testnet:peer-repair
+pnpm testnet:peer-guard:install
+```
+
+The repair workflow reads both official nodes, chooses the highest-total-
+difficulty head, stops mining on isolated or lower-total-difficulty nodes, adds
+the official enodes as peers through local admin RPC, waits for block-hash
+agreement, and only then resumes mining. It must not run `geth init`, delete
+`data/node/testnet`, replace genesis, or move node data.
+
+`peer-guard` runs privately beside the node and keeps required peers connected.
+If peer count drops below `QUBITOR_MIN_PEERS_BEFORE_MINE`, or public RPCs
+disagree on finalized block hashes, it pauses mining until the node is safe to
+mine again.
 
 Reset the dedicated Ubuntu testnet from the updated bridge genesis with:
 

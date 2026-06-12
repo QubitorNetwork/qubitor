@@ -5,6 +5,8 @@ node_modules/
 # Environment and local config
 .env
 .env.*
+.env.testnet
+.env.testnet.local
 !.env.example
 !.env.*.example
 .envrc
