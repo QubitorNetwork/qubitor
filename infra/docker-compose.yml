@@ -57,6 +57,8 @@ services:
         fi
         if [ -n "$${QUBITOR_BOOTNODES:-}" ]; then
           set -- "$$@" --bootnodes "$${QUBITOR_BOOTNODES}"
+        elif [ -n "$${QUBITOR_REQUIRED_PEERS:-}" ]; then
+          set -- "$$@" --bootnodes "$${QUBITOR_REQUIRED_PEERS}"
         elif [ "$${QUBITOR_DISCOVERY:-0}" != "1" ]; then
           set -- "$$@" --nodiscover
         fi
@@ -67,6 +69,8 @@ services:
       QUBITOR_EOA_TXS: ${QUBITOR_EOA_TXS:-0}
       QUBITOR_DISCOVERY: ${QUBITOR_DISCOVERY:-0}
       QUBITOR_BOOTNODES: ${QUBITOR_BOOTNODES:-}
+      QUBITOR_REQUIRED_PEERS: ${QUBITOR_REQUIRED_PEERS:-}
+      QUBITOR_MIN_PEERS_BEFORE_MINE: ${QUBITOR_MIN_PEERS_BEFORE_MINE:-1}
       QUBITOR_P2P_NAT: ${QUBITOR_P2P_NAT:-}
       QUBITOR_NODEKEY_FILE: ${QUBITOR_DOCKER_NODEKEY_FILE:-}
       QUBITOR_MINER_THREADS: ${QUBITOR_MINER_THREADS:-1}
@@ -83,6 +87,27 @@ services:
       - "${QUBITOR_P2P_UDP_PORT:-30303}:30303/udp"
     restart: unless-stopped
     profiles: ["node", "all"]
+
+  peer-guard:
+    <<: *node-service
+    command: sh -lc "node scripts/testnet/peer-guard.mjs"
+    environment:
+      <<: *service-env
+      QUBITOR_LOCAL_ADMIN_RPC_URL: http://qubitor-node:8545
+      QUBITOR_BOOTNODES: ${QUBITOR_BOOTNODES:-}
+      QUBITOR_REQUIRED_PEERS: ${QUBITOR_REQUIRED_PEERS:-}
+      QUBITOR_MIN_PEERS_BEFORE_MINE: ${QUBITOR_MIN_PEERS_BEFORE_MINE:-1}
+      QUBITOR_MINER_THREADS: ${QUBITOR_MINER_THREADS:-1}
+      QUBITOR_EXPECTED_CHAIN_ID: ${QUBITOR_EXPECTED_CHAIN_ID:-0x164ca}
+      QUBITOR_EXPECTED_GENESIS_HASH: ${QUBITOR_EXPECTED_GENESIS_HASH:-0x8c422f1572daf17ff4b699c98db0b1d72a71bf9ef0f8cb926b1a15b4a3f33483}
+      QUBITOR_PEER_GUARD_PUBLIC_RPC_URLS: ${QUBITOR_PEER_GUARD_PUBLIC_RPC_URLS:-https://testrpc.qubitor.org/rpc,https://testrpc2.qubitor.org/rpc}
+      QUBITOR_PEER_GUARD_INTERVAL_MS: ${QUBITOR_PEER_GUARD_INTERVAL_MS:-15000}
+      QUBITOR_PEER_GUARD_FINALITY_DEPTH: ${QUBITOR_PEER_GUARD_FINALITY_DEPTH:-12}
+      QUBITOR_PEER_GUARD_MAX_HEIGHT_LAG: ${QUBITOR_PEER_GUARD_MAX_HEIGHT_LAG:-24}
+    depends_on:
+      - qubitor-node
+    restart: unless-stopped
+    profiles: ["services", "all"]
 
   rpc-gateway:
     <<: *node-service

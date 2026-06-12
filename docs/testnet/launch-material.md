@@ -182,9 +182,15 @@ peers so a node does not mine alone:
 ```env
 QUBITOR_REQUIRED_PEERS=enode://39214e35a86ef628de4c359aa5778c9baa0c053f95886d215d8f51d4f17151a02af63f187fce06083fe5e0b151a9e3a2accc71d1312d72d2a989facf66e5012c@bootnode-1.testnet.qubitor.org:30303,enode://59b33be8ed0165c35f508971e7d08c84168d1d8f8e9927bf332c19b4b0d0275ee758c883b035a2271395c7cf968a582f6e59f407fcaa1c6b7ee84001d96b4a10@bootnode-2.testnet.qubitor.org:30303
 QUBITOR_MIN_PEERS_BEFORE_MINE=1
+QUBITOR_PEER_GUARD_PUBLIC_RPC_URLS=https://testrpc.qubitor.org/rpc,https://testrpc2.qubitor.org/rpc
 ```
 
-Use the IP enodes in `clients/qubitor-node/config/testnet/bootnodes.json` only when DNS resolution itself is the thing being debugged.
+`QUBITOR_REQUIRED_PEERS` is public peer material, not a secret. The `peer-guard`
+service uses it to re-add official peers, pause mining if peer count drops
+below `QUBITOR_MIN_PEERS_BEFORE_MINE`, and keep mining paused if the public
+RPCs disagree on a finalized block hash. Use the IP enodes in
+`clients/qubitor-node/config/testnet/bootnodes.json` only when DNS resolution
+itself is the thing being debugged.
 
 When you generate the wallet-owned PQ vault from another machine, point the wallet CLI at the server's public PQ relayer and faucet URLs or use an SSH tunnel. For example, with an SSH tunnel:
 
