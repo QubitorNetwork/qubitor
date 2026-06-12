@@ -12,8 +12,9 @@
     "nativeBridgeVault": "0x0000000000000000000000000000000000000303",
     "bridgeAdmin": "0x7DeB434c79bD02A5E8AAA8f1929064f01aFC2aE9",
     "bridgeGuardian": "0x7DeB434c79bD02A5E8AAA8f1929064f01aFC2aE9",
+    "bridgeGuardianPublicKeyCommitment": "0x47baf9c830e8cc6bdcb4820fa414623a6ad00d01534f132918bdedb47739c2a8",
     "initialNativeLiquidityWei": "1000000000000000000000000",
-    "deploymentMode": "genesis-native-bridge-contracts",
-    "guardianGasBalanceWei": "1000000000000000000000"
+    "guardianGasBalanceWei": "1000000000000000000000",
+    "deploymentMode": "genesis-native-bridge-contracts"
   }
 }

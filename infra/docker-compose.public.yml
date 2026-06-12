@@ -40,9 +40,11 @@ services:
         rpc_host="$$(primary_host "$$QUBITOR_PUBLIC_RPC_URL")"
         explorer_host="$$(primary_host "$$QUBITOR_PUBLIC_EXPLORER_URL")"
         faucet_host="$$(primary_host "$$QUBITOR_PUBLIC_FAUCET_URL")"
+        bridge_api_host="$$(primary_host "$${QUBITOR_PUBLIC_BRIDGE_API_URL:-}")"
         rpc_sites="$$(normalize_hosts "$$QUBITOR_PUBLIC_RPC_URL,$${QUBITOR_PUBLIC_RPC_ALIASES:-}")"
         explorer_sites="$$(normalize_hosts "$$QUBITOR_PUBLIC_EXPLORER_URL,$${QUBITOR_PUBLIC_EXPLORER_ALIASES:-}")"
         faucet_sites="$$(normalize_hosts "$$QUBITOR_PUBLIC_FAUCET_URL,$${QUBITOR_PUBLIC_FAUCET_ALIASES:-}")"
+        bridge_api_sites="$$(normalize_hosts "$${QUBITOR_PUBLIC_BRIDGE_API_URL:-},$${QUBITOR_PUBLIC_BRIDGE_API_ALIASES:-}")"
 
         if [ -z "$$rpc_host" ] || [ -z "$$explorer_host" ] || [ -z "$$faucet_host" ]; then
           echo "QUBITOR_PUBLIC_RPC_URL, QUBITOR_PUBLIC_EXPLORER_URL, and QUBITOR_PUBLIC_FAUCET_URL are required" >&2
@@ -55,11 +57,17 @@ services:
           handle /pq-dev* {
             reverse_proxy pq-relayer-api:18548
           }
-          handle /verify* {
-            reverse_proxy discord-verification:18550
-          }
           handle /faucet* {
             reverse_proxy faucet-api:18546
+          }
+          handle /bridge* {
+            reverse_proxy bridge-indexer:18701
+          }
+          handle /vault* {
+            reverse_proxy bridge-indexer:18701
+          }
+          handle /epochs* {
+            reverse_proxy bridge-indexer:18701
           }
           handle {
             reverse_proxy rpc-gateway:18545
@@ -83,14 +91,26 @@ services:
         EOF
         fi
 
+        if [ -n "$$bridge_api_host" ]; then
+          cat >> /etc/caddy/Caddyfile <<EOF
+
+        $$bridge_api_sites {
+          encode gzip
+          reverse_proxy bridge-indexer:18701
+        }
+        EOF
+        fi
+
         caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     environment:
       QUBITOR_PUBLIC_RPC_URL: ${QUBITOR_PUBLIC_RPC_URL:?set QUBITOR_PUBLIC_RPC_URL}
       QUBITOR_PUBLIC_EXPLORER_URL: ${QUBITOR_PUBLIC_EXPLORER_URL:?set QUBITOR_PUBLIC_EXPLORER_URL}
       QUBITOR_PUBLIC_FAUCET_URL: ${QUBITOR_PUBLIC_FAUCET_URL:?set QUBITOR_PUBLIC_FAUCET_URL}
+      QUBITOR_PUBLIC_BRIDGE_API_URL: ${QUBITOR_PUBLIC_BRIDGE_API_URL:-}
       QUBITOR_PUBLIC_RPC_ALIASES: ${QUBITOR_PUBLIC_RPC_ALIASES:-}
       QUBITOR_PUBLIC_EXPLORER_ALIASES: ${QUBITOR_PUBLIC_EXPLORER_ALIASES:-}
       QUBITOR_PUBLIC_FAUCET_ALIASES: ${QUBITOR_PUBLIC_FAUCET_ALIASES:-}
+      QUBITOR_PUBLIC_BRIDGE_API_ALIASES: ${QUBITOR_PUBLIC_BRIDGE_API_ALIASES:-}
     ports:
       - "${QUBITOR_PUBLIC_HTTP_PORT:-80}:80"
       - "${QUBITOR_PUBLIC_HTTPS_PORT:-443}:443"
@@ -100,7 +120,14 @@ services:
     depends_on:
       - rpc-gateway
       - pq-relayer-api
-      - discord-verification
       - faucet-api
       - explorer-lite
+    networks:
+      - default
+      - bridge-backend
     profiles: ["public", "all"]
+
+networks:
+  bridge-backend:
+    external: true
+    name: ${QUBITOR_BRIDGE_BACKEND_NETWORK:-qubitor-bridge-testnet_default}
