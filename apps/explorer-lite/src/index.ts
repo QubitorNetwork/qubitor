@@ -1,4 +1,6 @@
 import http from "node:http";
+import { createHash } from "node:crypto";
+import { readdir, readFile, stat } from "node:fs/promises";
 import {
   QUBITOR_MLDSA65_PRECOMPILE,
   defaultQubitorRpcUrl,
@@ -12,6 +14,10 @@ const networkName = getQubitorNetworkName();
 const network = getConfiguredQubitorNetwork(networkName);
 const rpcUrl = process.env.QUBITOR_RPC_URL ?? defaultQubitorRpcUrl(network);
 const indexerUrl = process.env.QUBITOR_INDEXER_URL ?? "http://127.0.0.1:18549";
+const nodeDataDir = process.env.QUBITOR_NODE_DATA_DIR ?? `/repo/data/node/${networkName}`;
+const genesisFile = process.env.QUBITOR_GENESIS_FILE ?? `/repo/clients/qubitor-node/config/${networkName}/genesis.json`;
+const launchMaterialDir = process.env.QUBITOR_TESTNET_MATERIAL_DIR ?? "/repo/artifacts/testnet/launch";
+const backupDir = process.env.QUBITOR_TESTNET_BACKUP_DIR ?? "/repo/backups";
 const faucetStatusUrl =
   process.env.QUBITOR_FAUCET_STATUS_URL ?? `${network.faucetUrls[0] ?? "http://127.0.0.1:18546"}/faucet/status`;
 
@@ -74,6 +80,32 @@ interface NetworkSecurityStatus {
     peerCount?: string | null;
   };
   faucet?: FaucetStatus & { unavailable?: boolean; statusUrl?: string };
+}
+
+interface FileStatus {
+  path: string;
+  exists: boolean;
+  name?: string;
+  updatedAt?: string;
+  createdAt?: string;
+  ageSeconds?: number;
+  sha256?: string;
+  error?: string;
+}
+
+interface LaunchStatus {
+  genesisFile: FileStatus;
+  nodeData: FileStatus;
+  latestLaunchMaterial?: FileStatus;
+  latestSnapshot?: FileStatus;
+  latestResetBackup?: FileStatus;
+  chain: {
+    chainId: number;
+    rpcUrl: string;
+    rpcGenesisHash?: string;
+    rpcHead?: string;
+    rpcHeadDecimal?: string;
+  };
 }
 
 interface DeploymentState {
@@ -292,6 +324,16 @@ function displayHexQuantity(value: string | null | undefined) {
   return quantity === undefined ? "Unavailable" : quantity.toString();
 }
 
+function displayAge(seconds: number | undefined) {
+  if (seconds === undefined || !Number.isFinite(seconds)) return "Unavailable";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
 function toBigInt(value: string | bigint | null | undefined): bigint | undefined {
   try {
     if (typeof value === "bigint") return value;
@@ -315,6 +357,111 @@ function formatQbt(value: string | bigint | null | undefined) {
 function shortHex(value: string | null | undefined) {
   if (!value || value.length <= 18) return value ?? "";
   return `${value.slice(0, 10)}...${value.slice(-8)}`;
+}
+
+async function fileStatus(path: string, withHash = false): Promise<FileStatus> {
+  try {
+    const stats = await stat(path);
+    const status: FileStatus = {
+      path,
+      exists: true,
+      updatedAt: stats.mtime.toISOString(),
+      createdAt: stats.birthtime.toISOString(),
+      ageSeconds: Math.max(0, Math.floor((Date.now() - stats.mtimeMs) / 1000)),
+    };
+    if (withHash && stats.isFile()) {
+      const contents = await readFile(path);
+      status.sha256 = createHash("sha256").update(contents).digest("hex");
+    }
+    return status;
+  } catch (error: unknown) {
+    return {
+      path,
+      exists: false,
+      error: error instanceof Error ? error.message : "unavailable",
+    };
+  }
+}
+
+async function newestChildStatus(path: string): Promise<FileStatus | undefined> {
+  try {
+    const entries = await readdir(path, { withFileTypes: true });
+    const candidates = await Promise.all(
+      entries
+        .filter((entry) => !entry.name.startsWith("."))
+        .map(async (entry) => {
+          const childPath = `${path}/${entry.name}`;
+          const childStats = await stat(childPath);
+          return { name: entry.name, path: childPath, stats: childStats };
+        }),
+    );
+    const newest = candidates.sort((left, right) => right.stats.mtimeMs - left.stats.mtimeMs)[0];
+    if (!newest) return undefined;
+    return {
+      path: newest.path,
+      name: newest.name,
+      exists: true,
+      updatedAt: newest.stats.mtime.toISOString(),
+      createdAt: newest.stats.birthtime.toISOString(),
+      ageSeconds: Math.max(0, Math.floor((Date.now() - newest.stats.mtimeMs) / 1000)),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function newestNestedSnapshotStatus(path: string): Promise<FileStatus | undefined> {
+  try {
+    const top = await readdir(path, { withFileTypes: true });
+    const nested: FileStatus[] = [];
+    for (const entry of top.filter((item) => item.isDirectory())) {
+      const stampPath = `${path}/${entry.name}`;
+      const hostEntries = await readdir(stampPath, { withFileTypes: true });
+      for (const hostEntry of hostEntries.filter((item) => item.isDirectory())) {
+        const childPath = `${stampPath}/${hostEntry.name}`;
+        const childStats = await stat(childPath);
+        nested.push({
+          path: childPath,
+          name: `${entry.name}/${hostEntry.name}`,
+          exists: true,
+          updatedAt: childStats.mtime.toISOString(),
+          createdAt: childStats.birthtime.toISOString(),
+          ageSeconds: Math.max(0, Math.floor((Date.now() - childStats.mtimeMs) / 1000)),
+        });
+      }
+    }
+    return nested.sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""))[0];
+  } catch {
+    return undefined;
+  }
+}
+
+async function readLaunchStatus(): Promise<LaunchStatus> {
+  const [genesisStatus, nodeDataStatus, latestLaunchMaterial, latestSnapshot, latestResetBackup, genesisBlock, headHex] =
+    await Promise.all([
+      fileStatus(genesisFile, true),
+      fileStatus(nodeDataDir),
+      newestChildStatus(launchMaterialDir),
+      newestNestedSnapshotStatus(`${backupDir}/testnet-snapshots`),
+      newestNestedSnapshotStatus(`${backupDir}/testnet-reset`),
+      rpc<{ hash?: string }>("eth_getBlockByNumber", ["0x0", false]),
+      rpc<string>("eth_blockNumber"),
+    ]);
+  const head = hexToBigInt(headHex);
+  return {
+    genesisFile: genesisStatus,
+    nodeData: nodeDataStatus,
+    latestLaunchMaterial,
+    latestSnapshot,
+    latestResetBackup,
+    chain: {
+      chainId: network.chainId,
+      rpcUrl,
+      rpcGenesisHash: genesisBlock?.hash,
+      rpcHead: headHex ?? undefined,
+      rpcHeadDecimal: head === undefined ? undefined : head.toString(),
+    },
+  };
 }
 
 function pill(label: unknown, tone: "good" | "warn" | "neutral" | "danger" = "neutral") {
@@ -417,7 +564,17 @@ function fallbackSecurityStatus(faucet: FaucetStatus | null): NetworkSecuritySta
   };
 }
 
-function renderSecurityPanels(status: NetworkSecurityStatus, mining: MiningStatus | null) {
+function publicExplorerHealthPayload(launchStatus: LaunchStatus) {
+  return {
+    ok: true,
+    network: networkName,
+    chainId: network.chainId,
+    blockNumber: launchStatus.chain.rpcHeadDecimal ?? null,
+    genesisHash: launchStatus.chain.rpcGenesisHash ?? null,
+  };
+}
+
+function renderSecurityPanels(status: NetworkSecurityStatus, mining: MiningStatus | null, launchStatus: LaunchStatus) {
   const faucet = status.faucet;
   const treasury = faucet?.treasuryControl;
   const miningBlock = status.mining?.blockNumber ?? mining?.blockNumber;
@@ -464,7 +621,14 @@ function renderSecurityPanels(status: NetworkSecurityStatus, mining: MiningStatu
       ${row("Hashrate", displayHexQuantity(hashrate))}
       ${row("Peers", displayHexQuantity(peerCount))}
       ${row("Target block time", `${status.targetBlockTimeSeconds ?? mining?.targetBlockTimeSeconds ?? network.targetBlockTimeSeconds}s`)}
-      ${row("RPC", rpcUrl)}
+      ${row("Public RPC", network.rpcUrls[0] ?? "Unavailable")}
+    </section>
+    <section class="panel wide soft">
+      <h2>Chain Evidence</h2>
+      ${row("Genesis block", shortHex(launchStatus.chain.rpcGenesisHash))}
+      ${row("Genesis config", launchStatus.genesisFile.sha256 ? shortHex(launchStatus.genesisFile.sha256) : "Unavailable")}
+      ${row("Explorer head", displayBlock(launchStatus.chain.rpcHeadDecimal))}
+      ${row("Network status", "Live")}
     </section>
   </div>`;
 }
@@ -613,7 +777,7 @@ function renderProofSummaryLinks() {
 }
 
 async function home() {
-  const [latestHex, mining, gatewayStatus, directFaucet, indexerStatus, indexedBlocks, indexedEvents] = await Promise.all([
+  const [latestHex, mining, gatewayStatus, directFaucet, indexerStatus, indexedBlocks, indexedEvents, launchStatus] = await Promise.all([
     rpc<string>("eth_blockNumber"),
     rpc<MiningStatus>("qubitor_getMiningStatus"),
     rpc<NetworkSecurityStatus>("qubitor_getNetworkSecurityStatus"),
@@ -621,6 +785,7 @@ async function home() {
     indexer<IndexerStatus>("/indexer/status"),
     indexer<{ blocks: IndexedBlock[] }>("/blocks?limit=10"),
     indexer<{ events: IndexedEvent[] }>("/events?limit=8"),
+    readLaunchStatus(),
   ]);
   const latest = hexToBigInt(gatewayStatus?.mining?.blockNumber ?? mining?.blockNumber ?? latestHex) ?? 0n;
   const status = gatewayStatus ?? fallbackSecurityStatus(directFaucet);
@@ -654,7 +819,7 @@ async function home() {
   return page(
     "Qubitor Explorer Lite",
     `<div class="hero"><div><h1>${escapeHtml(status.network ?? network.name)}</h1><p>Profile ${escapeHtml(networkName)}. Chain ID ${status.chainId ?? network.chainId}. Native gas coin ${network.nativeCurrency.symbol}. Default Qubitor Accounts are ${escapeHtml(status.defaultSecurityMode ?? "PQ Native")}.</p></div></div>
-     ${renderSecurityPanels(status, mining)}
+     ${renderSecurityPanels(status, mining, launchStatus)}
      ${renderProofSummaryLinks()}
      ${renderIndexedActivity(indexerStatus, indexedEvents?.events ?? [])}
      ${renderControlSurfaces(status)}
@@ -893,8 +1058,9 @@ const server = http.createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
     if (url.pathname === "/health") {
+      const launchStatus = await readLaunchStatus();
       response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ ok: true, network: networkName, rpcUrl, chainId: network.chainId }));
+      response.end(JSON.stringify(publicExplorerHealthPayload(launchStatus)));
       return;
     }
 
