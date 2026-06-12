@@ -49,6 +49,9 @@ export const QUBITOR_ACCOUNT_FACTORY =
 export const QUBITOR_TESTNET_RPC_URL = "https://testrpc.qubitor.org/rpc" as const;
 export const QUBITOR_TESTNET_EXPLORER_URL = "https://testexplorer.qubitor.org" as const;
 export const QUBITOR_TESTNET_FAUCET_URL = "https://testrpc.qubitor.org" as const;
+export const QUBITOR_TESTNET_SECONDARY_RPC_URL = "https://testrpc2.qubitor.org/rpc" as const;
+export const QUBITOR_TESTNET_SECONDARY_EXPLORER_URL = "https://testexplorer2.qubitor.org" as const;
+export const QUBITOR_TESTNET_SECONDARY_FAUCET_URL = "https://testrpc2.qubitor.org" as const;
 
 export const qubitorSystemContracts = {
   mldsa65Precompile: QUBITOR_MLDSA65_PRECOMPILE,
@@ -185,9 +188,9 @@ export const qubitorTestnet: QubitorNetworkConfig = {
   shortName: "qbt-testnet",
   chainId: 91338,
   networkId: 91338,
-  rpcUrls: [QUBITOR_TESTNET_RPC_URL],
-  blockExplorerUrls: [QUBITOR_TESTNET_EXPLORER_URL],
-  faucetUrls: [QUBITOR_TESTNET_FAUCET_URL],
+  rpcUrls: [QUBITOR_TESTNET_RPC_URL, QUBITOR_TESTNET_SECONDARY_RPC_URL],
+  blockExplorerUrls: [QUBITOR_TESTNET_EXPLORER_URL, QUBITOR_TESTNET_SECONDARY_EXPLORER_URL],
+  faucetUrls: [QUBITOR_TESTNET_FAUCET_URL, QUBITOR_TESTNET_SECONDARY_FAUCET_URL],
 };
 
 export const qubitorMainnet: QubitorNetworkConfig = {

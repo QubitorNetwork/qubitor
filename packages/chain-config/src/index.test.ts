@@ -11,6 +11,9 @@ import {
   QUBITOR_TESTNET_EXPLORER_URL,
   QUBITOR_TESTNET_FAUCET_URL,
   QUBITOR_TESTNET_RPC_URL,
+  QUBITOR_TESTNET_SECONDARY_EXPLORER_URL,
+  QUBITOR_TESTNET_SECONDARY_FAUCET_URL,
+  QUBITOR_TESTNET_SECONDARY_RPC_URL,
   assertDevnetCompatibilityKey,
   defaultQubitorExecutionRpcUrl,
   defaultQubitorRpcUrl,
@@ -40,11 +43,15 @@ assert.equal(getConfiguredQubitorNetwork("testnet").chainId, 91338);
 assert.equal(defaultQubitorRpcUrl(qubitorDevnet), "http://127.0.0.1:18545/rpc");
 assert.equal(defaultQubitorExecutionRpcUrl(qubitorDevnet), "http://127.0.0.1:8545");
 assert.equal(qubitorTestnet.rpcUrls[0], QUBITOR_TESTNET_RPC_URL);
+assert.equal(qubitorTestnet.rpcUrls[1], QUBITOR_TESTNET_SECONDARY_RPC_URL);
 assert.equal(qubitorTestnet.blockExplorerUrls[0], QUBITOR_TESTNET_EXPLORER_URL);
+assert.equal(qubitorTestnet.blockExplorerUrls[1], QUBITOR_TESTNET_SECONDARY_EXPLORER_URL);
 assert.equal(qubitorTestnet.faucetUrls[0], QUBITOR_TESTNET_FAUCET_URL);
+assert.equal(qubitorTestnet.faucetUrls[1], QUBITOR_TESTNET_SECONDARY_FAUCET_URL);
 assert.equal(defaultQubitorRpcUrl(qubitorTestnet), "https://testrpc.qubitor.org/rpc");
 assert.equal(defaultQubitorExecutionRpcUrl(qubitorTestnet), "https://testrpc.qubitor.org/rpc");
 assert.equal(walletAddEthereumChainParams(qubitorTestnet).rpcUrls[0], "https://testrpc.qubitor.org/rpc");
+assert.equal(walletAddEthereumChainParams(qubitorTestnet).rpcUrls[1], "https://testrpc2.qubitor.org/rpc");
 assert.throws(() => defaultQubitorRpcUrl(qubitorMainnet), /no default Qubitor RPC URL configured/);
 assert.throws(
   () => defaultQubitorExecutionRpcUrl(qubitorMainnet),
