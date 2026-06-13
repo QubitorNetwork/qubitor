@@ -25,6 +25,8 @@
     "proofs:verify": "tsx packages/proof-verifier/src/cli.ts",
     "go:test": "bash scripts/go-test.sh",
     "coregeth:build": "bash scripts/coregeth-build.sh",
+    "coregeth:docker:build": "bash scripts/docker/coregeth-image.sh build",
+    "coregeth:docker:publish:testnet": "bash scripts/docker/coregeth-image.sh publish-testnet",
     "coregeth:test": "bash scripts/coregeth-test.sh",
     "contracts:build": "forge build --root contracts",
     "contracts:test": "forge test --root contracts",

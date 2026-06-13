@@ -49,6 +49,19 @@ pnpm coregeth:build
 pnpm devnet:acceptance
 ```
 
+External testnet node operators can use the published CoreGeth image instead
+of building the fork locally:
+
+```sh
+docker pull qubitor/qubitor-geth:testnet
+docker run --rm qubitor/qubitor-geth:testnet version
+```
+
+Public testnet config, genesis hash, and bootnode enodes live in
+`clients/qubitor-node/config/testnet/`. Start sync-only first, verify the
+block 0 hash, verify `net_peerCount >= 1`, compare a recent block hash with
+`https://testrpc.qubitor.org/rpc`, then enable mining.
+
 For manual devnet work:
 
 ```sh
