@@ -32,6 +32,11 @@ jwtsecret
 **/.env.local
 **/.env.*.local
 
+# CoreGeth's accounts/keystore package is source code. Keep runtime keystores
+# ignored everywhere else, but track the vendored client package.
+!clients/qubitor-node/coregeth/accounts/keystore/
+!clients/qubitor-node/coregeth/accounts/keystore/**
+
 # Chain/node runtime state
 data/
 logs/
@@ -59,6 +64,18 @@ coverage/
 contracts/cache/
 contracts/out/
 contracts/broadcast/
+
+# CoreGeth's build directory contains source tooling such as build/ci.go.
+# Generated binaries and caches stay ignored.
+!clients/qubitor-node/coregeth/build/
+!clients/qubitor-node/coregeth/build/**
+!clients/qubitor-node/coregeth/internal/build/
+!clients/qubitor-node/coregeth/internal/build/**
+clients/qubitor-node/coregeth/build/bin/
+clients/qubitor-node/coregeth/build/_bin/
+clients/qubitor-node/coregeth/build/_workspace/
+clients/qubitor-node/coregeth/build/cache/
+clients/qubitor-node/coregeth/build/static/
 
 # Go outputs
 *.test

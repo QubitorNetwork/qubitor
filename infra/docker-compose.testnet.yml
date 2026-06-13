@@ -2,7 +2,7 @@ name: qubitor-network-testnet
 
 services:
   qubitor-node:
-    image: ${QUBITOR_COREGETH_IMAGE:-qubitor/qubitor-geth:testnet}
+    image: ${QUBITOR_COREGETH_IMAGE:-qubitororg/qubitor-geth:testnet}
     environment:
       QUBITOR_NETWORK: testnet
       QUBITOR_NETWORK_ID: ${QUBITOR_NETWORK_ID:-91338}

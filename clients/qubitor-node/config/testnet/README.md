@@ -23,10 +23,27 @@ The public bootnodes are listed in `bootnodes.json` as full `enode://` URLs. Min
 The DNS enodes are the public defaults. The manifest also keeps IP enodes as
 fallback values for debugging DNS issues.
 
+The public Docker image is:
+
+```sh
+docker pull qubitororg/qubitor-geth:testnet
+docker run --rm qubitororg/qubitor-geth:testnet version
+```
+
 Before running a node, initialize a fresh data directory with this genesis file and start CoreGeth with network ID `91338` and the published bootnodes:
 
 ```sh
 geth init --datadir=/path/to/qubitor-testnet-data clients/qubitor-node/config/testnet/genesis.json
+```
+
+Or with the Docker image from the repository root:
+
+```sh
+docker run --rm \
+  -v "$PWD/clients/qubitor-node/config/testnet/genesis.json:/genesis.json:ro" \
+  -v "$HOME/.qubitor-testnet:/data" \
+  qubitororg/qubitor-geth:testnet \
+  init --datadir /data /genesis.json
 ```
 
 Then verify your local block 0 hash matches the public testnet:
@@ -52,6 +69,28 @@ For node environments, keep the official enodes in `QUBITOR_REQUIRED_PEERS`:
 QUBITOR_REQUIRED_PEERS=enode://39214e35a86ef628de4c359aa5778c9baa0c053f95886d215d8f51d4f17151a02af63f187fce06083fe5e0b151a9e3a2accc71d1312d72d2a989facf66e5012c@bootnode-1.testnet.qubitor.org:30303,enode://59b33be8ed0165c35f508971e7d08c84168d1d8f8e9927bf332c19b4b0d0275ee758c883b035a2271395c7cf968a582f6e59f407fcaa1c6b7ee84001d96b4a10@bootnode-2.testnet.qubitor.org:30303
 QUBITOR_MIN_PEERS_BEFORE_MINE=1
 ```
+
+Start in sync-only mode:
+
+```sh
+docker run --rm -it \
+  -p 8545:8545 \
+  -p 30303:30303/tcp \
+  -p 30303:30303/udp \
+  -v "$HOME/.qubitor-testnet:/data" \
+  qubitororg/qubitor-geth:testnet \
+  --datadir /data \
+  --networkid 91338 \
+  --bootnodes "$QUBITOR_REQUIRED_PEERS" \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.api eth,net,web3 \
+  --syncmode snap \
+  --maxpeers 50
+```
+
+Only after sync and peer checks pass, restart with mining enabled and set
+`--miner.etherbase` to your Qubitor wallet reward address.
 
 Run the launch preflight before publishing a new testnet config:
 

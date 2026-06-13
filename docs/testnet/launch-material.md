@@ -173,6 +173,14 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 ```
 
+The public testnet CoreGeth image is `qubitororg/qubitor-geth:testnet`.
+Operators can set it explicitly when using Compose:
+
+```env
+QUBITOR_COREGETH_IMAGE=qubitororg/qubitor-geth:testnet
+QUBITOR_NETWORK_ID=91338
+```
+
 Keep raw CoreGeth RPC bound to `127.0.0.1` unless you have a private network or firewall rule for it. Publish user-facing RPC through the gateway behind HTTPS. Launch material sets `QUBITOR_EOA_TXS=0`; do not remove it. Use `infra/docker-compose.public.yml` to publish HTTPS through Caddy; it routes `/pq-dev/*` on the RPC hostname to the raw PQ submit gateway.
 It also routes `/faucet/*` on the RPC hostname to the faucet API, so `testrpc.qubitor.org` is enough for the wallet's read, faucet, and PQ transaction flows. For temporary rehearsals, keep old hostnames in the alias variables instead of making them the canonical public URLs.
 
