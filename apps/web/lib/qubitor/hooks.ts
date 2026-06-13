@@ -248,12 +248,24 @@ export function useAddress(address: string): Async<AccountInfo> {
           /* method absent */
         }
         try {
-          const rd = await rpc<{ readiness?: string }>(
+          const rd = await rpc<{
+            accountType?: string;
+            securityMode?: string;
+            readiness?: string | { pqPublicKeyCommitment?: string };
+          }>(
             "qubitor_getAccountReadiness",
             [address],
             { signal: ac.signal, cacheMs: 10000 },
           );
-          readiness = rd?.readiness ?? null;
+          readiness =
+            typeof rd?.readiness === "string"
+              ? rd.readiness
+              : rd?.securityMode ?? rd?.accountType ?? null;
+          pqCommitment =
+            pqCommitment ??
+            (typeof rd?.readiness === "object"
+              ? rd.readiness?.pqPublicKeyCommitment ?? null
+              : null);
         } catch {
           /* method absent */
         }
