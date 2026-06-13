@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COREGETH_DIR="$ROOT_DIR/clients/qubitor-node/coregeth"
-IMAGE_REPOSITORY="${QUBITOR_COREGETH_IMAGE_REPOSITORY:-qubitor/qubitor-geth}"
+IMAGE_REPOSITORY="${QUBITOR_COREGETH_IMAGE_REPOSITORY:-qubitororg/qubitor-geth}"
 PLATFORM="${QUBITOR_COREGETH_DOCKER_PLATFORM:-linux/amd64}"
 ACTION="${1:-build}"
 

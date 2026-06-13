@@ -173,11 +173,11 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 ```
 
-The public testnet CoreGeth image is `qubitor/qubitor-geth:testnet`.
+The public testnet CoreGeth image is `qubitororg/qubitor-geth:testnet`.
 Operators can set it explicitly when using Compose:
 
 ```env
-QUBITOR_COREGETH_IMAGE=qubitor/qubitor-geth:testnet
+QUBITOR_COREGETH_IMAGE=qubitororg/qubitor-geth:testnet
 QUBITOR_NETWORK_ID=91338
 ```
 

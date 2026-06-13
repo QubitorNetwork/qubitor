@@ -26,8 +26,8 @@ fallback values for debugging DNS issues.
 The public Docker image is:
 
 ```sh
-docker pull qubitor/qubitor-geth:testnet
-docker run --rm qubitor/qubitor-geth:testnet version
+docker pull qubitororg/qubitor-geth:testnet
+docker run --rm qubitororg/qubitor-geth:testnet version
 ```
 
 Before running a node, initialize a fresh data directory with this genesis file and start CoreGeth with network ID `91338` and the published bootnodes:
@@ -42,7 +42,7 @@ Or with the Docker image from the repository root:
 docker run --rm \
   -v "$PWD/clients/qubitor-node/config/testnet/genesis.json:/genesis.json:ro" \
   -v "$HOME/.qubitor-testnet:/data" \
-  qubitor/qubitor-geth:testnet \
+  qubitororg/qubitor-geth:testnet \
   init --datadir /data /genesis.json
 ```
 
@@ -78,7 +78,7 @@ docker run --rm -it \
   -p 30303:30303/tcp \
   -p 30303:30303/udp \
   -v "$HOME/.qubitor-testnet:/data" \
-  qubitor/qubitor-geth:testnet \
+  qubitororg/qubitor-geth:testnet \
   --datadir /data \
   --networkid 91338 \
   --bootnodes "$QUBITOR_REQUIRED_PEERS" \

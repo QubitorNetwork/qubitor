@@ -53,8 +53,8 @@ External testnet node operators can use the published CoreGeth image instead
 of building the fork locally:
 
 ```sh
-docker pull qubitor/qubitor-geth:testnet
-docker run --rm qubitor/qubitor-geth:testnet version
+docker pull qubitororg/qubitor-geth:testnet
+docker run --rm qubitororg/qubitor-geth:testnet version
 ```
 
 Public testnet config, genesis hash, and bootnode enodes live in
