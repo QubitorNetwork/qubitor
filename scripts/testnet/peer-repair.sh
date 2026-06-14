@@ -22,18 +22,6 @@ fail() {
   exit 1
 }
 
-require_contains() {
-  local file="$1" pattern="$2"
-  grep -Fq -- "$pattern" "$file" || fail "${file#$ROOT_DIR/} must contain: $pattern"
-}
-
-reject_contains() {
-  local file="$1" pattern="$2"
-  if grep -Fq -- "$pattern" "$file"; then
-    fail "${file#$ROOT_DIR/} must not contain: $pattern"
-  fi
-}
-
 usage() {
   cat >&2 <<'EOF'
 usage: pnpm testnet:peer-repair [status|repair|install-guard]
@@ -364,12 +352,7 @@ REMOTE
 }
 
 install_guard_command() {
-  require_contains "$ROOT_DIR/infra/docker-compose.yml" "peer-guard"
-  require_contains "$ROOT_DIR/infra/docker-compose.yml" "scripts/testnet/peer-guard.mjs"
-  require_contains "$ROOT_DIR/scripts/testnet/server-access-lib.sh" "--exclude .env.testnet"
-  require_contains "$ROOT_DIR/scripts/testnet/server-access-lib.sh" "--exclude data"
-  reject_contains "$ROOT_DIR/scripts/testnet/server-access-lib.sh" "rm -rf data/node/testnet"
-  reject_contains "$ROOT_DIR/scripts/testnet/server-access-lib.sh" "geth init --datadir=/data /genesis.json"
+  bash "$ROOT_DIR/scripts/testnet/deploy-safety.sh"
   install_guard_target primary
   install_guard_target secondary
 }

@@ -29,6 +29,28 @@ paths compose-file relative through `QUBITOR_GENESIS_HOST_FILE` and
 `QUBITOR_NODEKEY_HOST_FILE`, so the same material can be synced to the Ubuntu
 servers under `~/QubitorNetwork`.
 
+Resetting live testnet data is guarded. `pnpm testnet:reset-with-bridge-genesis`
+will not run unless the command includes
+`QUBITOR_TESTNET_RESET_CONFIRM=RESET_QUBITOR_TESTNET_91338`. Before any live
+testnet data is removed, the reset script archives the current node, indexer,
+and Caddy testnet directories under `backups/testnet-reset/<timestamp>/<host>/`
+and writes a manifest with the pre-reset head and container inventory.
+
+For ongoing operations, install daily snapshots and the height monitor:
+
+```sh
+pnpm testnet:snapshot:install-cron
+pnpm testnet:height-monitor:install-cron
+```
+
+Use `pnpm testnet:snapshot:run` before risky maintenance, then
+`pnpm testnet:snapshot:pull` if you want a workstation copy under
+`artifacts/testnet/server-snapshots/`. Snapshots include node/indexer/Caddy
+state, a best-effort CoreGeth chain export, and a bridge Postgres dump when the
+bridge stack is present. The height monitor writes
+`data/monitor/testnet-height-alerts.log` if the chain height drops, the genesis
+hash changes, or block production stalls.
+
 By default the generator advertises `QUBITOR_TESTNET_SERVER_HOST` when it is set,
 plus `QUBITOR_TESTNET_BOOTNODE_2_HOST` when that optional second server is set,
 then `QUBITOR_BOOTNODE_PUBLIC_IP`, then `127.0.0.1`. You can also set
@@ -47,6 +69,8 @@ Cloudflare-friendly hostname:
 ```text
 testrpc.qubitor.org           A 66.29.136.165
 testexplorer.qubitor.org      A 66.29.136.165
+testrpc2.qubitor.org          A 66.29.128.164
+testexplorer2.qubitor.org     A 66.29.128.164
 bootnode-1.testnet.qubitor.org A 66.29.136.165
 bootnode-2.testnet.qubitor.org A 66.29.128.164
 ```
@@ -59,6 +83,9 @@ Cloudflare proxy rules matter here:
   `/pq-dev/*` and `/faucet/*`.
 - `testexplorer.qubitor.org` can also be proxied. It is optional for wallet
   operation.
+- `testrpc2.qubitor.org` and `testexplorer2.qubitor.org` are the secondary
+  public stack on bootnode 2. They use the same chain and launch material, but
+  their public URL overrides keep Caddy from claiming the primary hostnames.
 - Nested service names such as `rpc.testnet.qubitor.org` require either DNS-only
   mode or a Cloudflare edge certificate for `*.testnet.qubitor.org`.
 - Bootnode records must be **DNS only** unless Cloudflare Spectrum or another
@@ -173,14 +200,6 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 ```
 
-The public testnet CoreGeth image is `qubitororg/qubitor-geth:testnet`.
-Operators can set it explicitly when using Compose:
-
-```env
-QUBITOR_COREGETH_IMAGE=qubitororg/qubitor-geth:testnet
-QUBITOR_NETWORK_ID=91338
-```
-
 Keep raw CoreGeth RPC bound to `127.0.0.1` unless you have a private network or firewall rule for it. Publish user-facing RPC through the gateway behind HTTPS. Launch material sets `QUBITOR_EOA_TXS=0`; do not remove it. Use `infra/docker-compose.public.yml` to publish HTTPS through Caddy; it routes `/pq-dev/*` on the RPC hostname to the raw PQ submit gateway.
 It also routes `/faucet/*` on the RPC hostname to the faucet API, so `testrpc.qubitor.org` is enough for the wallet's read, faucet, and PQ transaction flows. For temporary rehearsals, keep old hostnames in the alias variables instead of making them the canonical public URLs.
 
@@ -193,12 +212,14 @@ QUBITOR_MIN_PEERS_BEFORE_MINE=1
 QUBITOR_PEER_GUARD_PUBLIC_RPC_URLS=https://testrpc.qubitor.org/rpc,https://testrpc2.qubitor.org/rpc
 ```
 
-`QUBITOR_REQUIRED_PEERS` is public peer material, not a secret. The `peer-guard`
-service uses it to re-add official peers, pause mining if peer count drops
-below `QUBITOR_MIN_PEERS_BEFORE_MINE`, and keep mining paused if the public
-RPCs disagree on a finalized block hash. Use the IP enodes in
-`clients/qubitor-node/config/testnet/bootnodes.json` only when DNS resolution
-itself is the thing being debugged.
+`QUBITOR_REQUIRED_PEERS` is public peer material, not a secret. The
+`peer-guard` service uses it to re-add official peers, pause mining if peer
+count drops below `QUBITOR_MIN_PEERS_BEFORE_MINE`, and keep mining paused if
+the public RPCs disagree on a finalized block hash. Auxiliary miners start in
+sync-only mode by default; set `QUBITOR_AUX_MINER_START_MINING=1` only after
+the local genesis hash, peer count, and public head checks pass.
+Use the IP enodes from `clients/qubitor-node/config/testnet/bootnodes.json`
+only when DNS resolution itself is the thing being debugged.
 
 When you generate the wallet-owned PQ vault from another machine, point the wallet CLI at the server's public PQ relayer and faucet URLs or use an SSH tunnel. For example, with an SSH tunnel:
 
@@ -233,6 +254,20 @@ Then run:
 ```sh
 QUBITOR_TESTNET_ENV_FILE=artifacts/testnet/launch/<timestamp>/.env.testnet.local pnpm testnet:launch-preflight
 ```
+
+To promote bootnode 2 into a secondary public RPC without resetting chain data:
+
+```sh
+pnpm testnet:secondary-rpc:deploy
+pnpm testnet:secondary-rpc:status
+```
+
+The secondary deploy command uses the latest generated launch material, sources
+`node-env/bootnode-2.env`, overrides the public URLs to
+`https://testrpc2.qubitor.org` and `https://testexplorer2.qubitor.org`, and
+starts the public chain services on the second host. Use
+`pnpm testnet:secondary-rpc:logs` and `pnpm testnet:secondary-rpc:restart` for
+operations after it is live.
 
 `QUBITOR_TESTNET_ENV_FILE` is for generated runtime env files, not the local
 server-login env. Preflight and bootstrap only auto-load root env files when

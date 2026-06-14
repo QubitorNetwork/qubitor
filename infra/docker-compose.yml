@@ -16,6 +16,10 @@ x-service-env: &service-env
   QUBITOR_FAUCET_STATUS_URL: http://faucet-api:18546/faucet/status
   QUBITOR_FAUCET_ADDRESS: ${QUBITOR_FAUCET_ADDRESS:-}
   QUBITOR_INDEXER_URL: http://indexer:18549
+  QUBITOR_NODE_DATA_DIR: /repo/data/node/${QUBITOR_NETWORK:-devnet}
+  QUBITOR_GENESIS_FILE: /repo/clients/qubitor-node/config/${QUBITOR_NETWORK:-devnet}/genesis.json
+  QUBITOR_TESTNET_MATERIAL_DIR: /repo/artifacts/testnet/launch
+  QUBITOR_TESTNET_BACKUP_DIR: /repo/backups
 
 services:
   qubitor-node:
@@ -147,29 +151,6 @@ services:
       - "${QUBITOR_PQ_RELAYER_PORT:-18548}:18548"
     depends_on:
       - qubitor-node
-    profiles: ["services", "all"]
-
-  discord-verification:
-    <<: *node-service
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm discord-verification:start"
-    environment:
-      CI: "true"
-      DISCORD_VERIFICATION_PORT: 18550
-      DISCORD_VERIFY_BOT_TOKEN: ${DISCORD_VERIFY_BOT_TOKEN:-}
-      DISCORD_VERIFY_CLIENT_ID: ${DISCORD_VERIFY_CLIENT_ID:-}
-      DISCORD_VERIFY_CLIENT_SECRET: ${DISCORD_VERIFY_CLIENT_SECRET:-}
-      DISCORD_VERIFY_GUILD_ID: ${DISCORD_VERIFY_GUILD_ID:-}
-      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
-      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
-      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
-      DISCORD_GUILD_NAME: ${DISCORD_GUILD_NAME:-Qubitor}
-      DISCORD_VERIFY_PUBLIC_BASE_URL: ${DISCORD_VERIFY_PUBLIC_BASE_URL:-https://testrpc.qubitor.org}
-      DISCORD_VERIFY_REDIRECT_URI: ${DISCORD_VERIFY_REDIRECT_URI:-}
-      DISCORD_VERIFY_ROLE_NAME: ${DISCORD_VERIFY_ROLE_NAME:-Verified}
-      DISCORD_SERVER_INVITE_URL: ${DISCORD_SERVER_INVITE_URL:-}
-    ports:
-      - "${DISCORD_VERIFICATION_PORT:-18550}:18550"
     profiles: ["services", "all"]
 
   indexer:

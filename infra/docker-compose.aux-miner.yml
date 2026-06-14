@@ -1,0 +1,83 @@
+name: qubitor-aux-miner
+
+services:
+  aux-miner:
+    build:
+      context: ../clients/qubitor-node/coregeth
+      dockerfile: Dockerfile
+    image: ${QUBITOR_COREGETH_IMAGE:-qubitor/qubitor-geth:testnet}
+    entrypoint: []
+    command:
+      - sh
+      - -lc
+      - |
+        case "$${QUBITOR_AUX_MINER_DATA_LABEL:-}" in
+          testnet-aux-miner-*) ;;
+          *)
+            echo "refusing unsafe auxiliary miner data label: $${QUBITOR_AUX_MINER_DATA_LABEL:-}; expected testnet-aux-miner-*" >&2
+            exit 64
+            ;;
+        esac
+        if [ "$${QUBITOR_AUX_MINER_ALLOW_INIT:-0}" != "1" ]; then
+          echo "QUBITOR_AUX_MINER_ALLOW_INIT=1 is required for a fresh auxiliary data directory" >&2
+          exit 64
+        fi
+        if [ ! -d /data/geth/chaindata ]; then
+          geth init --datadir=/data /genesis.json
+        fi
+        set -- geth \
+          --datadir=/data \
+          --networkid="$${QUBITOR_NETWORK_ID:-91338}" \
+          --port="$${QUBITOR_AUX_MINER_P2P_PORT:-30313}" \
+          --http \
+          --http.addr=0.0.0.0 \
+          --http.port=8545 \
+          --http.api=eth,net,web3,qubitor \
+          --http.corsdomain='*' \
+          --http.vhosts='*' \
+          --ws \
+          --ws.addr=0.0.0.0 \
+          --ws.port=8546 \
+          --ws.api=eth,net,web3 \
+          --miner.etherbase="$${QUBITOR_AUX_MINER_ETHERBASE}" \
+          --miner.gaslimit="$${QUBITOR_MINER_GASLIMIT:-30000000}" \
+          --verbosity="$${QUBITOR_AUX_MINER_VERBOSITY:-3}"
+        if [ "$${QUBITOR_AUX_MINER_START_MINING:-0}" = "1" ]; then
+          set -- "$$@" --mine --miner.threads="$${QUBITOR_AUX_MINER_THREADS:-1}"
+        fi
+        if [ -n "$${QUBITOR_AUX_MINER_NAT:-}" ]; then
+          set -- "$$@" --nat "$${QUBITOR_AUX_MINER_NAT}"
+        fi
+        if [ -n "$${QUBITOR_BOOTNODES:-}" ]; then
+          set -- "$$@" --bootnodes "$${QUBITOR_BOOTNODES}"
+        elif [ -n "$${QUBITOR_REQUIRED_PEERS:-}" ]; then
+          set -- "$$@" --bootnodes "$${QUBITOR_REQUIRED_PEERS}"
+        elif [ "$${QUBITOR_DISCOVERY:-1}" != "1" ]; then
+          set -- "$$@" --nodiscover
+        fi
+        exec "$$@"
+    environment:
+      QUBITOR_NETWORK: testnet
+      QUBITOR_NETWORK_ID: ${QUBITOR_NETWORK_ID:-91338}
+      QUBITOR_EOA_TXS: "0"
+      QUBITOR_DISCOVERY: ${QUBITOR_DISCOVERY:-1}
+      QUBITOR_BOOTNODES: ${QUBITOR_BOOTNODES:-}
+      QUBITOR_REQUIRED_PEERS: ${QUBITOR_REQUIRED_PEERS:-}
+      QUBITOR_MIN_PEERS_BEFORE_MINE: ${QUBITOR_MIN_PEERS_BEFORE_MINE:-1}
+      QUBITOR_AUX_MINER_ALLOW_INIT: ${QUBITOR_AUX_MINER_ALLOW_INIT:-0}
+      QUBITOR_AUX_MINER_DATA_LABEL: ${QUBITOR_AUX_MINER_DATA_LABEL:-}
+      QUBITOR_AUX_MINER_ETHERBASE: ${QUBITOR_AUX_MINER_ETHERBASE:?QUBITOR_AUX_MINER_ETHERBASE is required}
+      QUBITOR_AUX_MINER_THREADS: ${QUBITOR_AUX_MINER_THREADS:-1}
+      QUBITOR_AUX_MINER_START_MINING: ${QUBITOR_AUX_MINER_START_MINING:-0}
+      QUBITOR_AUX_MINER_P2P_PORT: ${QUBITOR_AUX_MINER_P2P_PORT:-30313}
+      QUBITOR_AUX_MINER_NAT: ${QUBITOR_AUX_MINER_NAT:-}
+      QUBITOR_MINER_GASLIMIT: ${QUBITOR_MINER_GASLIMIT:-30000000}
+    volumes:
+      - ${QUBITOR_GENESIS_HOST_FILE:-../clients/qubitor-node/config/testnet/genesis.json}:/genesis.json:ro
+      - ../data/node/${QUBITOR_AUX_MINER_DATA_LABEL:?QUBITOR_AUX_MINER_DATA_LABEL is required}:/data
+    ports:
+      - "${QUBITOR_AUX_MINER_RPC_PORT:-127.0.0.1:8555}:8545"
+      - "${QUBITOR_AUX_MINER_WS_PORT:-127.0.0.1:8556}:8546"
+      - "${QUBITOR_AUX_MINER_P2P_TCP_PORT:-30313}:${QUBITOR_AUX_MINER_P2P_PORT:-30313}/tcp"
+      - "${QUBITOR_AUX_MINER_P2P_UDP_PORT:-30313}:${QUBITOR_AUX_MINER_P2P_PORT:-30313}/udp"
+    restart: unless-stopped

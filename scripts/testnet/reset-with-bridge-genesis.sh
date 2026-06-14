@@ -7,6 +7,7 @@ ACCESS_ENV_FALLBACK="$ROOT_DIR/.env.testnet"
 REMOTE_ROOT="${QUBITOR_TESTNET_REMOTE_ROOT:-QubitorNetwork}"
 PRIMARY_NODE_ENV="node-env/bootnode-1.env"
 SECONDARY_NODE_ENV="node-env/bootnode-2.env"
+RESET_CONFIRM_VALUE="RESET_QUBITOR_TESTNET_91338"
 
 fail() {
   echo "[qubitor-testnet-reset] $*" >&2
@@ -15,6 +16,12 @@ fail() {
 
 warn() {
   echo "[qubitor-testnet-reset] warning: $*" >&2
+}
+
+require_reset_confirmation() {
+  if [[ "${QUBITOR_TESTNET_RESET_CONFIRM:-}" != "$RESET_CONFIRM_VALUE" ]]; then
+    fail "refusing to reset testnet without explicit confirmation. Run: QUBITOR_TESTNET_RESET_CONFIRM=$RESET_CONFIRM_VALUE pnpm testnet:reset-with-bridge-genesis"
+  fi
 }
 
 load_access_env() {
@@ -110,6 +117,7 @@ rsync_to_host() {
 
 remote_reset_command() {
   local env_file="$1" node_env_file="$2" profiles="$3"
+  local reset_confirm="${QUBITOR_TESTNET_RESET_CONFIRM:-}"
   cat <<REMOTE
 set -euo pipefail
 cd "$REMOTE_ROOT"
@@ -120,10 +128,60 @@ set -a
 . "$env_file"
 . "$node_env_file"
 set +a
+if [[ "$reset_confirm" != "$RESET_CONFIRM_VALUE" ]]; then
+  echo "[qubitor-testnet-reset] remote reset refused; QUBITOR_TESTNET_RESET_CONFIRM must be $RESET_CONFIRM_VALUE" >&2
+  exit 1
+fi
+
+backup_testnet_state() {
+  local pre_reset_head="\$1"
+  local backup_root="\${QUBITOR_TESTNET_RESET_BACKUP_DIR:-backups/testnet-reset}"
+  local backup_stamp="\${QUBITOR_TESTNET_RESET_BACKUP_STAMP:-\$(date -u +%Y%m%dT%H%M%SZ)}"
+  local host_slug
+  host_slug="\$(hostname | tr -c 'A-Za-z0-9_.-' '-')"
+  local backup_dir="\$backup_root/\$backup_stamp/\$host_slug"
+  mkdir -p "\$backup_dir"
+  chmod 700 "\$backup_root" "\$backup_root/\$backup_stamp" "\$backup_dir" 2>/dev/null || true
+
+  {
+    printf 'createdAt=%s\\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'hostname=%s\\n' "\$(hostname)"
+    printf 'remoteRoot=%s\\n' "$REMOTE_ROOT"
+    printf 'envFile=%s\\n' "$env_file"
+    printf 'nodeEnvFile=%s\\n' "$node_env_file"
+    printf 'profiles=%s\\n' "$profiles"
+    printf 'preResetHead=%s\\n' "\$pre_reset_head"
+    printf 'network=%s\\n' "\${QUBITOR_NETWORK:-}"
+    printf 'networkId=%s\\n' "\${QUBITOR_NETWORK_ID:-}"
+    printf 'bootnodes=%s\\n' "\${QUBITOR_BOOTNODES:-}"
+    printf '\\n[docker ps]\\n'
+    docker ps --format '{{.Names}} {{.CreatedAt}} {{.Status}}' 2>/dev/null || true
+    printf '\\n[qubitor containers]\\n'
+    docker ps -a --filter 'name=qubitor-network' --format '{{.Names}} {{.CreatedAt}} {{.Status}}' 2>/dev/null || true
+  } > "\$backup_dir/manifest.txt"
+
+  local wrote=0
+  local path archive
+  for path in data/node/testnet data/indexer/testnet data/caddy/testnet; do
+    if [[ -e "\$path" ]]; then
+      archive="\${path//\//__}.tar.gz"
+      echo "[qubitor-testnet-reset] backing up \$path to \$backup_dir/\$archive"
+      tar -czf "\$backup_dir/\$archive" "\$path"
+      wrote=1
+    fi
+  done
+  if [[ "\$wrote" == "0" ]]; then
+    echo "[qubitor-testnet-reset] no existing testnet data found to back up" | tee -a "\$backup_dir/manifest.txt"
+  fi
+  echo "[qubitor-testnet-reset] backup manifest: \$backup_dir/manifest.txt"
+}
+
+pre_reset_head="\$(curl -fsS -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' http://127.0.0.1:8545 2>/dev/null || true)"
 docker compose -f infra/docker-compose.yml -f infra/docker-compose.testnet.yml -f infra/docker-compose.public.yml --profile all down --remove-orphans || true
 docker compose -p qubitor-network down --remove-orphans || true
 docker compose -p qubitor-network-testnet down --remove-orphans || true
 docker compose -p qubitor-network-public down --remove-orphans || true
+backup_testnet_state "\$pre_reset_head"
 docker ps -aq --filter 'name=qubitor-network' | xargs -r docker rm -f || true
 rm -rf data/node/testnet data/indexer/testnet data/caddy/testnet
 docker compose -f infra/docker-compose.yml -f infra/docker-compose.testnet.yml -f infra/docker-compose.public.yml $profiles up -d --build
@@ -140,6 +198,7 @@ REMOTE
 main() {
   cd "$ROOT_DIR"
   load_access_env
+  require_reset_confirmation
 
   echo "[qubitor-testnet-reset] verifying local bridge genesis"
   node scripts/testnet/verify-bridge-genesis.mjs
@@ -149,6 +208,8 @@ main() {
   QUBITOR_PUBLIC_RPC_URL="${QUBITOR_PUBLIC_RPC_URL:-https://testrpc.qubitor.org}" \
   QUBITOR_PUBLIC_EXPLORER_URL="${QUBITOR_PUBLIC_EXPLORER_URL:-https://testexplorer.qubitor.org}" \
   QUBITOR_PUBLIC_FAUCET_URL="${QUBITOR_PUBLIC_FAUCET_URL:-https://testrpc.qubitor.org}" \
+  QUBITOR_PUBLIC_BRIDGE_API_URL="${QUBITOR_PUBLIC_BRIDGE_API_URL:-https://api.0xq.app}" \
+  QUBITOR_BRIDGE_BACKEND_NETWORK="${QUBITOR_BRIDGE_BACKEND_NETWORK:-qubitor-bridge-testnet_default}" \
     pnpm testnet:material:generate
 
   local latest
