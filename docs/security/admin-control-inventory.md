@@ -1,5 +1,10 @@
 # Admin Control Inventory
 
+> Engineering-only document. Prohibited environment variable names are listed
+> here so readiness gates can reject legacy EOA paths; they are not public
+> setup instructions and they are not live secret values.
+
+
 ## Gate
 
 The exact Qubitor claim is:

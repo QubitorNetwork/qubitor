@@ -1,5 +1,10 @@
 # PQ-Native Transaction Layer
 
+> Engineering-only document. The environment variable names below are
+> prohibited legacy surfaces kept as guardrail examples, not public operator
+> instructions and not live secrets.
+
+
 ## Non-Negotiable Outcome
 
 Qubitor-native means **No EOA anywhere**.
