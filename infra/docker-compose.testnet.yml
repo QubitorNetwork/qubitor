@@ -2,7 +2,7 @@ name: qubitor-network-testnet
 
 services:
   qubitor-node:
-    image: ${QUBITOR_COREGETH_IMAGE:-qubitororg/qubitor-geth:testnet}
+    image: ${QUBITOR_COREGETH_IMAGE:-qubitor/qubitor-geth:testnet}
     environment:
       QUBITOR_NETWORK: testnet
       QUBITOR_NETWORK_ID: ${QUBITOR_NETWORK_ID:-91338}
@@ -49,6 +49,10 @@ services:
       QUBITOR_NETWORK: testnet
       QUBITOR_EOA_TXS: "0"
       QUBITOR_DEPLOYMENTS_FILE: /repo/contracts/deployments/testnet/deployments.json
+      QUBITOR_NODE_DATA_DIR: /repo/data/node/testnet
+      QUBITOR_GENESIS_FILE: /repo/clients/qubitor-node/config/testnet/genesis.json
+      QUBITOR_TESTNET_MATERIAL_DIR: /repo/artifacts/testnet/launch
+      QUBITOR_TESTNET_BACKUP_DIR: /repo/backups
 
   proof-pack:
     environment:

@@ -1,5 +1,9 @@
 # Qubitor Testnet Readiness
 
+> Engineering-only document. Prohibited environment variable names are listed
+> here as readiness guardrails, not as public miner/operator setup steps and not
+> as live secret values.
+
 Phase 6 is the bridge from local proof to public testnet. The rule is still:
 
 > Breaking ECDSA/secp256k1 alone cannot move default Qubitor Account funds or control protocol/admin accounts.
@@ -35,7 +39,10 @@ The gate checks that:
 - testnet runtime material sets `QUBITOR_EOA_TXS=0` and contains no EOA private-key variables.
 - generated PQ service-wallet material contains the faucet/miner treasury addresses used by the runtime env.
 - generated bootnode material can describe one or more public bootnodes with distinct advertised endpoints.
-- peer guard and peer-diversity checks exist so official nodes do not mine isolated forks.
+- public deploy scripts are checked by `pnpm testnet:deploy-safety` so they cannot silently reset `data/node/testnet`.
+- testnet snapshot and height-monitor scripts exist for daily backups and block-height drop detection.
+- peer/miner diversity can be checked with `pnpm testnet:peer-diversity:check`.
+- public firewall and exposed-service expectations are documented in `docs/testnet/firewall-and-public-surface.md`.
 - the admin-control inventory keeps protocol/admin authority behind Qubitor Accounts or stricter PQ policy.
 
 ## Compose Baseline
@@ -73,7 +80,7 @@ For public HTTPS endpoints, add the Caddy override after launch preflight passes
 docker compose -f infra/docker-compose.yml -f infra/docker-compose.testnet.yml -f infra/docker-compose.public.yml --profile all up --build
 ```
 
-The public override routes `testrpc.qubitor.org` to the RPC gateway, `/pq-dev/*` to the raw PQ submit gateway, and `/faucet/*` to the faucet API. The wallet uses `https://testrpc.qubitor.org/rpc` for JSON-RPC and the same origin for faucet/PQ submission. `testexplorer.qubitor.org` routes to Explorer Lite. During DNS propagation, keep temporary rehearsal hostnames in `QUBITOR_PUBLIC_RPC_ALIASES`, `QUBITOR_PUBLIC_EXPLORER_ALIASES`, and `QUBITOR_PUBLIC_FAUCET_ALIASES`.
+The public override routes `testrpc.qubitor.org` to the RPC gateway, `/pq-dev/*` to the raw PQ submit gateway, and `/faucet/*` to the faucet API. The wallet uses `https://testrpc.qubitor.org/rpc` for JSON-RPC and the same origin for faucet/PQ submission. `testexplorer.qubitor.org` routes to Explorer Lite. Bootnode 2 can run the same public stack at `https://testrpc2.qubitor.org/rpc` and `https://testexplorer2.qubitor.org` with the secondary RPC scripts. During DNS propagation, keep temporary rehearsal hostnames in `QUBITOR_PUBLIC_RPC_ALIASES`, `QUBITOR_PUBLIC_EXPLORER_ALIASES`, and `QUBITOR_PUBLIC_FAUCET_ALIASES`.
 
 Do not run the override as a public service until the launch preflight passes with real values.
 
@@ -92,17 +99,88 @@ pnpm testnet:bridge-genesis:verify
 QUBITOR_TESTNET_VERIFY_RPC_URL=http://127.0.0.1:8545 pnpm testnet:bridge-genesis:verify
 ```
 
-## Peer Split Prevention
+Live testnet operations are no-reset by default. Do not delete chain data, replace
+genesis, wipe node data, or rewrite the chain during hardening work. Emergency
+reset notes live separately in `docs/testnet/break-glass-reset.md` and are not
+part of normal readiness or deploy flow.
 
-Official nodes must keep each other configured as required peers. New miners
-should sync first, verify the genesis hash, verify `net_peerCount >= 1`, and
-compare a recent block hash with the public RPC before mining.
+After bootnode 2 is synced, promote it into a secondary public RPC without
+resetting chain data:
+
+```sh
+pnpm testnet:secondary-rpc:deploy
+pnpm testnet:secondary-rpc:status
+```
+
+The command reuses the latest generated launch material, sources
+`node-env/bootnode-2.env`, applies the `testrpc2.qubitor.org` and
+`testexplorer2.qubitor.org` public URL overrides, and starts the public chain
+services on the second host.
+
+## Operations Guards
+
+Before changing public services, run the no-reset deploy guard:
+
+```sh
+pnpm testnet:deploy-safety
+```
+
+To ship non-secret repo changes to the live hosts and restart only Explorer Lite:
+
+```sh
+pnpm testnet:ops-code:deploy
+```
+
+To ship RPC hardening and restart only the public gateway/RPC gateway:
+
+```sh
+pnpm testnet:ops-code:deploy-rpc-hardening
+```
+
+This sync excludes `.env*`, generated launch material, chain data, logs,
+snapshots, and build caches.
+
+Install daily server snapshots on both testnet hosts:
+
+```sh
+pnpm testnet:snapshot:install-cron
+pnpm testnet:snapshot:run
+pnpm testnet:snapshot:status
+```
+
+Snapshots are written under `backups/testnet-snapshots/<timestamp>/<host>/`.
+They include a manifest, Docker inventory, live node/indexer/Caddy archives,
+a best-effort CoreGeth chain export, and a bridge Postgres dump when the bridge
+database container is present. To pull snapshots back to this workstation:
+
+```sh
+pnpm testnet:snapshot:pull
+```
+
+Install the block-height monitor on both hosts:
+
+```sh
+pnpm testnet:height-monitor:install-cron
+pnpm testnet:height-monitor:run
+pnpm testnet:height-monitor:status
+```
+
+The monitor records the current height and genesis hash in
+`data/monitor/testnet-height.state`. It writes alerts to
+`data/monitor/testnet-height-alerts.log` if the node reports a lower height than
+the previous sample, if the genesis hash changes, or if blocks stop advancing.
 
 Check public peer and recent miner diversity without changing chain state:
 
 ```sh
 pnpm testnet:peer-diversity:check
 ```
+
+The check reads the public RPC endpoints, compares primary/secondary height lag,
+compares block hashes at a finalized sample height, samples recent block
+coinbase addresses, and fails when the configured peer, hash-agreement, or miner
+diversity thresholds are not met. For dashboards that should collect the same
+evidence without failing the shell, set `QUBITOR_PEER_DIVERSITY_WARN_ONLY=1`.
 
 If official nodes split or mine while isolated, repair peering without resetting
 or rewriting chain data:
@@ -114,23 +192,31 @@ pnpm testnet:peer-guard:install
 ```
 
 The repair workflow reads both official nodes, chooses the highest-total-
-difficulty head, stops mining on isolated or lower-total-difficulty nodes, adds
-the official enodes as peers through local admin RPC, waits for block-hash
+difficulty head, stops mining on isolated/lower-total-difficulty nodes, adds the
+official enodes as persistent peers through local admin RPC, waits for block-hash
 agreement, and only then resumes mining. It must not run `geth init`, delete
 `data/node/testnet`, replace genesis, or move node data.
 
 `peer-guard` runs privately beside the node and keeps required peers connected.
-If peer count drops below `QUBITOR_MIN_PEERS_BEFORE_MINE`, or public RPCs
-disagree on finalized block hashes, it pauses mining until the node is safe to
-mine again.
+If peer count drops below `QUBITOR_MIN_PEERS_BEFORE_MINE`, or public RPCs disagree
+on finalized block hashes, it pauses mining until the node is safe to mine again.
 
-Reset the dedicated Ubuntu testnet from the updated bridge genesis with:
+If diversity is below the launch threshold, add a separate auxiliary miner/full
+node without touching either live bootnode data directory:
 
 ```sh
-pnpm testnet:reset-with-bridge-genesis
+pnpm testnet:aux-miner:deploy secondary
+pnpm testnet:aux-miner:status secondary
 ```
 
-The reset command generates fresh launch material, preflights it, syncs the repo and generated node material to the configured Ubuntu servers, stops the old Compose stacks, deletes `data/node/testnet`, `data/indexer/testnet`, and testnet Caddy state, starts the nodes from the updated genesis, and verifies that the bridge system contracts have non-empty code plus the `1,000,000 QBT` native bridge liquidity seed through live RPC. The genesis also seeds `1,000 QBT` to the PQ bridge guardian for release-transaction gas; live readiness only requires an operational balance because real bridge tests spend that gas. It prefers `QUBITOR_TESTNET_SERVER_SSH_KEY` and falls back to password auth only when the env explicitly provides it. If the second bootnode is temporarily unreachable, set `QUBITOR_TESTNET_ALLOW_SECONDARY_OFFLINE=1` to reset the primary/public stack while preserving the secondary bootnode entry in generated launch material.
+The auxiliary miner uses `infra/docker-compose.aux-miner.yml`, a distinct
+`data/node/testnet-aux-miner-*` directory, and a separate generated PQ reward
+wallet under ignored private artifacts. It never mounts `data/node/testnet`.
+It may initialize its own empty auxiliary data directory, but it must not run
+`geth init` against the live bootnode data path.
+Auxiliary miners start sync-only by default. Set
+`QUBITOR_AUX_MINER_START_MINING=1` only after the node has the official genesis,
+at least one official peer, and matching block hashes with the public RPCs.
 
 After the testnet node is mining, bootstrap only verifies that PoW rewards have reached the PQ miner/faucet treasury:
 
