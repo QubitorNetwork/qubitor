@@ -1,5 +1,10 @@
 # Qubitor Testnet Readiness
 
+> Engineering-only document. Prohibited environment variable names are listed
+> here as readiness guardrails, not as public miner/operator setup steps and not
+> as live secret values.
+
+
 Phase 6 is the bridge from local proof to public testnet. The rule is still:
 
 > Breaking ECDSA/secp256k1 alone cannot move default Qubitor Account funds or control protocol/admin accounts.
