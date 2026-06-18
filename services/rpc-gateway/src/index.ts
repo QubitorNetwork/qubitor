@@ -27,6 +27,66 @@ interface JsonRpcResponse {
   error?: JsonRpcError;
 }
 
+export const MAX_RPC_BODY_BYTES = 1024 * 1024;
+export const MAX_RPC_BATCH_SIZE = 20;
+export const MAX_RPC_PARAMS = 32;
+
+export const publicRpcMethods = new Set([
+  "web3_clientVersion",
+  "web3_sha3",
+  "net_version",
+  "net_listening",
+  "net_peerCount",
+  "eth_chainId",
+  "eth_blockNumber",
+  "eth_syncing",
+  "eth_mining",
+  "eth_hashrate",
+  "eth_getBalance",
+  "eth_getCode",
+  "eth_getStorageAt",
+  "eth_getTransactionCount",
+  "eth_call",
+  "eth_estimateGas",
+  "eth_gasPrice",
+  "eth_feeHistory",
+  "eth_maxPriorityFeePerGas",
+  "eth_sendRawTransaction",
+  "eth_getTransactionByHash",
+  "eth_getTransactionReceipt",
+  "eth_getBlockByNumber",
+  "eth_getBlockByHash",
+  "eth_getBlockReceipts",
+  "eth_getBlockTransactionCountByNumber",
+  "eth_getBlockTransactionCountByHash",
+  "eth_getTransactionByBlockNumberAndIndex",
+  "eth_getTransactionByBlockHashAndIndex",
+  "eth_getLogs",
+  "eth_newFilter",
+  "eth_newBlockFilter",
+  "eth_getFilterChanges",
+  "eth_getFilterLogs",
+  "eth_uninstallFilter",
+  "eth_getProof",
+  "eth_getUncleByBlockHashAndIndex",
+  "eth_getUncleByBlockNumberAndIndex",
+  "eth_getUncleCountByBlockHash",
+  "eth_getUncleCountByBlockNumber",
+]);
+
+export const qubitorRpcMethods = new Set([
+  "qubitor_sendRawPQTransaction",
+  "qubitor_getMiningStatus",
+  "qubitor_getDifficulty",
+  "qubitor_getHashrate",
+  "qubitor_getNetworkSecurityStatus",
+  "qubitor_getSmartAccountDeploymentState",
+  "qubitor_getAccountSecurityMode",
+  "qubitor_getAccountReadiness",
+]);
+
+const blockedRpcPrefixes = ["admin_", "debug_", "personal_", "miner_", "txpool_", "engine_"];
+
 const networkName = getQubitorNetworkName();
 const network = getConfiguredQubitorNetwork(networkName);
 const upstreamRpcUrl = process.env.QUBITOR_RPC_URL ?? defaultQubitorExecutionRpcUrl(network);
@@ -77,6 +137,41 @@ function rpcResult(id: JsonRpcRequest["id"], result: unknown): JsonRpcResponse {
 
 function rpcError(id: JsonRpcRequest["id"], code: number, message: string): JsonRpcResponse {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
+}
+
+export function isBlockedRpcMethod(method: string): boolean {
+  return blockedRpcPrefixes.some((prefix) => method.startsWith(prefix));
+}
+
+export function isAllowedPublicRpcMethod(method: string): boolean {
+  return publicRpcMethods.has(method) || qubitorRpcMethods.has(method);
+}
+
+function requestIdFromUnknown(value: unknown): JsonRpcRequest["id"] {
+  if (typeof value !== "object" || value === null) return null;
+  const id = (value as { id?: unknown }).id;
+  return typeof id === "string" || typeof id === "number" || id === null ? id : null;
+}
+
+export function validateRpcRequest(request: unknown): JsonRpcResponse | undefined {
+  const id = requestIdFromUnknown(request);
+  if (typeof request !== "object" || request === null) {
+    return rpcError(null, -32600, "invalid JSON-RPC request");
+  }
+  const candidate = request as { method?: unknown; params?: unknown };
+  if (typeof candidate.method !== "string" || candidate.method.length === 0) {
+    return rpcError(id, -32600, "method is required");
+  }
+  if (candidate.params !== undefined && !Array.isArray(candidate.params)) {
+    return rpcError(id, -32602, "params must be an array");
+  }
+  if (Array.isArray(candidate.params) && candidate.params.length > MAX_RPC_PARAMS) {
+    return rpcError(id, -32602, `too many params; maximum is ${MAX_RPC_PARAMS}`);
+  }
+  if (isBlockedRpcMethod(candidate.method) || !isAllowedPublicRpcMethod(candidate.method)) {
+    return rpcError(id, -32601, `method ${candidate.method} is not available on the public Qubitor RPC`);
+  }
+  return undefined;
 }
 
 async function callUpstream(method: string, params: unknown[] = []) {
@@ -346,6 +441,9 @@ async function handleQubitorMethod(request: JsonRpcRequest): Promise<JsonRpcResp
 }
 
 async function handleRpc(request: JsonRpcRequest): Promise<JsonRpcResponse> {
+  const validationError = validateRpcRequest(request);
+  if (validationError) return validationError;
+
   const qubitorResponse = await handleQubitorMethod(request);
   if (qubitorResponse) return qubitorResponse;
 
@@ -367,14 +465,19 @@ function sendJson(response: http.ServerResponse, status: number, payload: unknow
   response.end(JSON.stringify(payload));
 }
 
-const server = http.createServer((request, response) => {
+export function publicHealthPayload() {
+  return { ok: true, network: networkName, chainId: network.chainId };
+}
+
+export function createRpcGatewayServer() {
+  return http.createServer((request, response) => {
   if (request.method === "OPTIONS") {
     sendJson(response, 204, {});
     return;
   }
 
   if (request.method === "GET" && request.url === "/health") {
-    sendJson(response, 200, { ok: true, network: networkName, upstreamRpcUrl, chainId: network.chainId });
+    sendJson(response, 200, publicHealthPayload());
     return;
   }
 
@@ -389,25 +492,53 @@ const server = http.createServer((request, response) => {
   }
 
   let body = "";
+  let bodyTooLarge = false;
   request.on("data", (chunk) => {
+    if (bodyTooLarge) return;
     body += chunk;
+    if (Buffer.byteLength(body) > MAX_RPC_BODY_BYTES) {
+      bodyTooLarge = true;
+      sendJson(response, 413, { error: "request body too large" });
+    }
   });
   request.on("end", () => {
+    if (bodyTooLarge) return;
     void (async () => {
+      let payload: unknown;
       try {
-        const payload = JSON.parse(body) as JsonRpcRequest | JsonRpcRequest[];
-        if (Array.isArray(payload)) {
-          sendJson(response, 200, await Promise.all(payload.map(handleRpc)));
+        payload = JSON.parse(body) as unknown;
+      } catch {
+        sendJson(response, 200, rpcError(null, -32700, "parse error"));
+        return;
+      }
+
+      try {
+        if (!Array.isArray(payload)) {
+          sendJson(response, 200, await handleRpc(payload as JsonRpcRequest));
           return;
         }
-        sendJson(response, 200, await handleRpc(payload));
+
+        if (payload.length === 0) {
+          sendJson(response, 200, rpcError(null, -32600, "batch must contain at least one request"));
+          return;
+        }
+        if (payload.length > MAX_RPC_BATCH_SIZE) {
+          sendJson(response, 200, rpcError(null, -32600, `batch size exceeds maximum ${MAX_RPC_BATCH_SIZE}`));
+          return;
+        }
+        sendJson(response, 200, await Promise.all(payload.map((entry) => handleRpc(entry as JsonRpcRequest))));
       } catch (error) {
         sendJson(response, 200, rpcError(null, -32603, error instanceof Error ? error.message : "internal error"));
       }
     })();
   });
-});
+  });
+}
 
-server.listen(port, () => {
-  console.log(`[qubitor-rpc-gateway] listening on http://127.0.0.1:${port}`);
-});
+const server = createRpcGatewayServer();
+
+if (process.env.QUBITOR_RPC_GATEWAY_DISABLE_LISTEN !== "1") {
+  server.listen(port, () => {
+    console.log(`[qubitor-rpc-gateway] listening on http://127.0.0.1:${port}`);
+  });
+}
