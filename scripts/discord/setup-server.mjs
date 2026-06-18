@@ -11,9 +11,11 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 const apiBase = "https://discord.com/api/v10";
 const envFile = process.env.DISCORD_ENV_FILE || path.join(repoRoot, "infra", ".env.discord.local");
 const dryRun = process.env.DISCORD_DRY_RUN === "1" || process.argv.includes("--dry-run");
-const verificationPortalUrl =
-  process.env.DISCORD_VERIFY_PORTAL_URL ??
-  `${(process.env.DISCORD_VERIFY_PUBLIC_BASE_URL ?? "https://testrpc.qubitor.org").replace(/\/+$/, "")}/verify`;
+const verificationPortalUrl = process.env.DISCORD_EXTERNAL_VERIFICATION_URL?.trim();
+const verificationPanelText =
+  verificationPortalUrl && verificationPortalUrl.length > 0
+    ? verificationPortalUrl
+    : "Use the verification panel in this channel.";
 
 const channelTypes = {
   text: 0,
@@ -261,7 +263,7 @@ const channelSpecs = [
       "- Explorer: https://testexplorer.qubitor.org",
       "- Faucet: https://testrpc.qubitor.org/faucet",
       "- GitHub: https://github.com/QubitorNetwork/qubitor",
-      `- Member verification: ${verificationPortalUrl}`,
+      "- Member verification: use the verification panel in #verify.",
     ],
   },
   {
@@ -305,9 +307,9 @@ const channelSpecs = [
     seed: [
       "Verify your Qubitor Discord access here:",
       "",
-      verificationPortalUrl,
+      verificationPanelText,
       "",
-      "The portal signs you in with Discord and adds the Verified role after confirming you are in this server.",
+      "Complete the check to unlock the main channels.",
     ],
   },
   {
