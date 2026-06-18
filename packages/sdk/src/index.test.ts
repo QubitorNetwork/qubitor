@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   QUBITOR_DEVNET_PQ_SEED,
   QUBITOR_TESTNET_RPC_URL,
+  QUBITOR_TESTNET_SECONDARY_RPC_URL,
   QUBITOR_ZERO_HASH,
   createPQAccount,
   createQubitorClient,
@@ -57,6 +58,7 @@ assert.equal(client.network.chainId, 91338);
 assert.equal(client.rpcUrl, "https://testrpc.qubitor.org/rpc");
 assert.equal(createQubitorClient({ networkName: "devnet", fetch: fetchMock }).network.chainId, qubitorDevnet.chainId);
 assert.equal(createQubitorClient({ networkName: "testnet", fetch: fetchMock }).rpcUrl, QUBITOR_TESTNET_RPC_URL);
+assert.equal(qubitorTestnet.rpcUrls.includes(QUBITOR_TESTNET_SECONDARY_RPC_URL), true);
 assert.throws(
   () => createQubitorClient({ network: qubitorMainnet, fetch: fetchMock }),
   /no default Qubitor RPC URL configured/,

@@ -7,6 +7,10 @@ Qubitor account status reads, and PQ-native transaction helpers. It intentionall
 not include private keys, server env files, faucet seeds, relayer secrets, or testnet
 launch artifacts.
 
+The default testnet client uses `https://testrpc.qubitor.org/rpc`. The chain
+metadata also includes `https://testrpc2.qubitor.org/rpc` as the secondary
+public endpoint.
+
 ```ts
 import {
   createQubitorClient,
